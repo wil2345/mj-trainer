@@ -1,5 +1,9 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const TILE_DIR = path.join(__dirname, '..', 'assets', 'tiles');
 
@@ -45,10 +49,10 @@ function generateSVG(name, char) {
     <!-- Unicode Character -->
     <text 
         x="24" 
-        y="32" 
+        y="34" 
         text-anchor="middle" 
         dominant-baseline="central" 
-        font-size="60" 
+        font-size="50" 
         fill="${color}"
     >${char}</text>
 </svg>`;

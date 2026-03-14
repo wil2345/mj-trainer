@@ -7,10 +7,10 @@
     <!-- Unicode Character -->
     <text 
         x="24" 
-        y="32" 
+        y="34" 
         text-anchor="middle" 
         dominant-baseline="central" 
-        font-size="60" 
+        font-size="50" 
         fill="#10b981"
     >🀐</text>
 </svg>
