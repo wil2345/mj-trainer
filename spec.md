@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification
+# Taiwan Mahjong Trainer - Project Specification (v1.1.0)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
@@ -7,13 +7,14 @@ Unlike full game simulators, this app focuses heavily on **efficiency training**
 
 ## 2. Technology Stack
 *   **Frontend Environment:** Vanilla JavaScript (ES6+ modules), HTML5.
-*   **Styling:** Tailwind CSS (via Play CDN - *Note: No frontend build step is required*).
+*   **Styling:** Tailwind CSS (via local `assets/tailwind.js` script for 100% offline support).
 *   **Theme:** Emerald Green (`#10b981`) and Blue (`#3b82f6`) color palette.
 *   **Data Persistence:** Browser `localStorage` (Offline-first, no backend database).
 *   **PWA Support:** 
     *   `manifest.json` and Service Worker (`sw.js`) for caching and offline play.
     *   **Auto-Update Mechanism:** The service worker listens for `updatefound` events and prompts the user with a "New version available!" toast, using `skipWaiting()` to seamlessly hot-reload the app upon confirmation.
     *   Uses a singular, scalable vector graphic (`icon.svg`) for all device icon sizes.
+    *   All asset links use **relative paths** (`./`) to support hosting in subdirectories (like GitHub Pages).
 *   **Testing / Tooling:** Node.js, Puppeteer (for scraping test cases from Tenhou).
 
 ## 3. Core Features
@@ -24,9 +25,14 @@ Unlike full game simulators, this app focuses heavily on **efficiency training**
 *   **Current & Max Streaks:** Tracks consecutive strings of correct discards.
 *   **Average Time:** Tracks the average time (in seconds) it takes to make a discard (can be toggled in settings).
 *   **Visual Tiers:** Stats change colors dynamically based on performance (e.g., Accuracy turns Red below 50%, Emerald above 75%, Golden above 90%).
-*   **Data Management:** Users can reset all statistics via the "..." (Kebab menu) in the top right of the global header.
+*   **Data Management:** Users can reset all statistics via the "Clear History" option in the global "..." menu.
 
-### B. Training Mode (最大機率打法練習)
+### B. History Tracking
+*   **Past Tests:** The app seamlessly records up to the last 500 decisions, saving the hand, user choice, correctness, and time spent.
+*   **History View:** Accessible via the global menu. Displays a scrollable feed of past hands with clear "CORRECT" or "WRONG" badges.
+*   **Review Mode:** Clicking any past record card instantly loads that specific hand into the Sandbox Calculator for in-depth analysis of the missed optimal discards.
+
+### C. Training Mode (最大機率打法練習)
 *   **Objective:** The user is presented with a random, valid Mahjong hand. They must select the tile to discard that gives them the highest number of acceptable drawn tiles to advance their hand.
 *   **Settings Modal:** Users can adjust settings before starting:
     *   **Hand Sizes:** 5, 8, 11, 14, and 17 tiles. (Defaults to 8).
@@ -39,7 +45,7 @@ Unlike full game simulators, this app focuses heavily on **efficiency training**
     *   If correct (but multiple optimal moves exist), it shows a slider of the *other* optimal choices.
 *   **Share Functionality:** Generates a custom URL with the exact hand state (e.g., `?hand=123m456p`) and copies it to the clipboard.
 
-### C. Calculator Mode (進張計算機)
+### D. Calculator Mode (進張計算機)
 *   **Objective:** A sandbox mode for testing custom hands.
 *   **Functionality:** 
     *   Users can freely click tiles in generated hands to see their exact discard stats without affecting their dashboard Accuracy.

@@ -17,7 +17,8 @@ let currentGameState = {
     includeHonors: false,
     recordTime: false,
     showTimer: false,
-    handStartTime: 0
+    handStartTime: 0,
+    reviewingHistoryIndex: null
 };
 
 let liveTimerInterval = null;
@@ -108,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const menuBtn = document.getElementById('global-menu-btn');
         const menuDropdown = document.getElementById('global-menu-dropdown');
         const resetBtn = document.getElementById('reset-stats-btn');
+        const historyBtn = document.getElementById('view-history-btn');
 
         if (menuBtn && menuDropdown) {
             menuBtn.addEventListener('click', (e) => {
@@ -127,6 +129,15 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        if (historyBtn) {
+            historyBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                menuDropdown.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => menuDropdown.classList.add('hidden'), 200);
+                renderHistoryScene();
+            });
+        }
+
         if (resetBtn) {
             resetBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -135,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     menuDropdown.classList.add('scale-95', 'opacity-0');
                     setTimeout(() => menuDropdown.classList.add('hidden'), 200);
                     // If on main dashboard, force a re-render
-                    if (currentGameState.mode === null) {
+                    if (currentGameState.mode === null || currentGameState.mode === 'History') {
                         initApp(); 
                     }
                 }
@@ -164,7 +175,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.0.0</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.1.0</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -242,21 +253,7 @@ function initApp() {
         </div>
     `;
 
-    const resetBtn = document.getElementById('reset-stats-btn');
-    if (resetBtn) {
-        resetBtn.addEventListener('click', () => {
-            if (confirm('Are you sure you want to reset all your statistics and streaks?')) {
-                clearStats();
-                initApp(); // re-render to show 0s
-            }
-        });
-    }
-
-    const darkBtn = document.getElementById('dark-mode-btn');
-    if (darkBtn) {
-        darkBtn.addEventListener('click', toggleDarkMode);
-    }
-
+    // Remove old reset button and dark mode logic from here as it is either global or removed
     document.getElementById('btn-trainer').addEventListener('click', () => {
         showSettingsModal('最大機率打法', false, false);
     });
@@ -325,7 +322,7 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
                     ` : ''}
                 </div>
                 <div class="p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800">
-                    <button id="apply-settings" class="bg-mj-green text-white font-bold px-6 py-3 rounded-xl shadow-md hover:bg-emerald-600 transition active:scale-95 w-full">
+                    <button id="apply-settings" class="${isCalculator ? 'bg-blue-500 hover:bg-blue-600' : 'bg-mj-green hover:bg-emerald-600'} text-white font-bold px-6 py-3 rounded-xl shadow-md transition active:scale-95 w-full">
                         ${isUpdate ? 'Apply & Restart Hand' : 'Start'}
                     </button>
                 </div>
@@ -508,6 +505,14 @@ function renderGameScene() {
     }
 
     const isWin = isWinningHand(hand);
+    const isReviewing = currentGameState.reviewingHistoryIndex !== null;
+    const stats = loadStats();
+    const history = stats.history || [];
+    
+    let displayTitle = mode;
+    if (isReviewing) {
+        displayTitle = `Record #${history.length - currentGameState.reviewingHistoryIndex}`;
+    }
 
     const handHtml = hand.map((tile, index) => 
         renderTile(tile, { 
@@ -520,13 +525,14 @@ function renderGameScene() {
     appContainer.innerHTML = `
         <div class="flex flex-col items-center justify-start h-full max-w-4xl mx-auto mt-2 px-2">
             <div class="w-full flex justify-between items-center mb-3">
-                <h2 class="text-lg font-bold text-gray-800 leading-none truncate">${mode}</h2>
+                <h2 class="text-lg font-bold text-gray-800 leading-none truncate">${displayTitle}</h2>
                 <div class="flex gap-2 sm:gap-3 items-center">
                     ${(!isCalculator && currentGameState.showTimer && !isResolved) ? `
                         <div class="bg-gray-800 text-white text-xs font-black px-3 py-1.5 rounded flex items-center shadow-inner min-w-[75px] justify-center">
                             ⏱️<span id="live-timer-display" class="font-mono w-[4ch] text-right inline-block tracking-tighter">0.0</span><span class="ml-0.5">s</span>
                         </div>
                     ` : ''}
+                    ${isReviewing ? '' : `
                     <button id="open-settings-btn" class="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1 bg-emerald-50 px-2 py-1.5 rounded transition border border-emerald-100" title="Settings">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -534,6 +540,7 @@ function renderGameScene() {
                         </svg>
                         <span class="hidden sm:inline">Settings</span>
                     </button>
+                    `}
                     <button id="share-btn" class="text-xs font-medium text-blue-500 hover:text-blue-700 flex items-center gap-1 transition bg-blue-50 px-2 py-1.5 rounded" title="Share Hand">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -553,14 +560,16 @@ function renderGameScene() {
                 
                 ${isCalculator ? `
                     <div class="flex flex-wrap justify-between items-center bg-gray-50 p-2 rounded-lg mb-3 gap-2 transition-colors">
-                        <p class="text-xs text-gray-500 font-medium whitespace-nowrap text-left hidden sm:block">Click tile to analyze:</p>
+                        <p class="text-xs text-gray-500 font-medium whitespace-nowrap text-left hidden sm:block">${isReviewing ? 'Analyzing past hand:' : 'Click tile to analyze:'}</p>
                         <div class="flex gap-2 w-full sm:w-auto justify-center">
+                            ${isReviewing ? '' : `
                             <button id="calc-edit-btn" class="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-bold rounded shadow-sm transition flex items-center gap-1">
                                 Edit
                             </button>
                             <button id="calc-refresh-btn" class="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-gray-700 shadow-sm transition flex items-center gap-1 text-xs font-bold">
                                 Random
                             </button>
+                            `}
                         </div>
                     </div>
                 ` : `
@@ -593,7 +602,11 @@ function renderGameScene() {
             clearInterval(liveTimerInterval);
             liveTimerInterval = null;
         }
-        initApp();
+        if (currentGameState.reviewingHistoryIndex !== null) {
+            renderHistoryScene();
+        } else {
+            initApp();
+        }
     });
 
     const settingsBtn = document.getElementById('open-settings-btn');
@@ -634,14 +647,21 @@ function renderGameScene() {
     }
 
     if (isCalculator) {
-        document.getElementById('calc-refresh-btn').addEventListener('click', () => {
-            currentGameState.hand = []; // Force new hand gen
-            startTrainingSession('進張計算機', true);
-        });
-        document.getElementById('calc-edit-btn').addEventListener('click', () => {
-            currentGameState.isEditing = true;
-            renderGameScene();
-        });
+        const refreshBtn = document.getElementById('calc-refresh-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                currentGameState.hand = []; // Force new hand gen
+                startTrainingSession('進張計算機', true);
+            });
+        }
+        
+        const editBtn = document.getElementById('calc-edit-btn');
+        if (editBtn) {
+            editBtn.addEventListener('click', () => {
+                currentGameState.isEditing = true;
+                renderGameScene();
+            });
+        }
     }
 
     if (!isWin && (isCalculator || !isResolved)) {
@@ -788,8 +808,9 @@ function handleDiscard(tile, index) {
         currentGameState.isResolved = true;
         
         // Time Tracking Logic
+        let timeTakenMs = 0;
         if (currentGameState.recordTime && currentGameState.handStartTime > 0) {
-            const timeTakenMs = Date.now() - currentGameState.handStartTime;
+            timeTakenMs = Date.now() - currentGameState.handStartTime;
             updateStat('totalTimeMs', prev => prev + timeTakenMs);
             updateStat('timedDecisions', prev => prev + 1);
         }
@@ -802,9 +823,129 @@ function handleDiscard(tile, index) {
         } else {
             updateStat('currentStreak', 0);
         }
+        
+        // Add to history
+        import('./storage.js').then(module => {
+             module.addHistoryRecord({
+                 hand: currentGameState.hand,
+                 userDiscard: tile,
+                 isCorrect: isCorrect,
+                 timeMs: timeTakenMs,
+                 timestamp: Date.now()
+             });
+        });
     }
 
     renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator, tile, index);
+}
+
+function renderHistoryScene() {
+    currentGameState.mode = 'History';
+    const appContainer = document.getElementById('app');
+    const stats = loadStats();
+    const history = stats.history || [];
+
+    const historyHtml = history.length === 0 
+        ? `<div class="flex flex-col items-center justify-center h-48 text-gray-400">
+             <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+             </svg>
+             <p>No history yet.</p>
+             <p class="text-xs mt-1">Play some hands in Training Mode to see your records here!</p>
+           </div>`
+        : history.map((record, index) => {
+            const timeStr = record.timeMs && record.timeMs > 0 ? `${(record.timeMs / 1000).toFixed(1)}s` : '-';
+            const handHtml = record.hand.map(t => renderTile(t, { size: 'xs', extraClasses: 'shadow-sm' })).join('');
+            const tileName = TILE_NAMES[record.userDiscard];
+            
+            return `
+                <div class="history-card bg-white p-4 rounded-xl shadow-md border border-gray-200 flex items-center justify-between gap-4 relative cursor-pointer hover:border-blue-400 hover:shadow-lg transition group" data-index="${index}">
+                    
+                    <div class="flex flex-col gap-2 w-full overflow-hidden">
+                        <div class="flex justify-between items-center border-b border-gray-50 pb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold text-gray-400">#${history.length - index}</span>
+                                <span class="text-xs font-medium text-gray-500">${new Date(record.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs font-mono text-gray-500 flex items-center gap-0.5"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>${timeStr}</span>
+                                <span class="${record.isCorrect ? 'bg-mj-green' : 'bg-mj-red'} text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">
+                                    ${record.isCorrect ? 'CORRECT' : 'WRONG'}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="flex flex-wrap gap-0.5 mt-1 overflow-x-auto pb-1 pointer-events-none">
+                            ${handHtml}
+                        </div>
+                        
+                        <div class="flex items-center gap-2 mt-1 bg-gray-50 p-2 rounded-lg pointer-events-none">
+                            <span class="text-xs text-gray-500 font-bold uppercase tracking-wider">SELECTED:</span>
+                            <div class="flex items-center gap-1">
+                                ${renderTile(record.userDiscard, { size: 'xs' })}
+                                <span class="font-bold text-gray-800 text-sm">${tileName}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Arrow Indicator -->
+                    <div class="flex-shrink-0 text-gray-300 group-hover:text-blue-500 transition-colors pl-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+
+                </div>
+            `;
+        }).join('');
+
+    appContainer.innerHTML = `
+        <div class="flex flex-col h-full max-w-4xl mx-auto mt-2 px-2 w-full">
+            <div class="w-full flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Recent History
+                </h2>
+                <button id="back-btn" class="text-xs font-medium text-gray-500 hover:text-gray-800 flex items-center gap-1 bg-gray-100 px-3 py-1.5 rounded transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Dashboard
+                </button>
+            </div>
+            
+            <div id="history-scroll-container" class="flex flex-col gap-3 pb-8 overflow-y-auto" style="max-height: calc(100vh - 120px);">
+                ${historyHtml}
+            </div>
+        </div>
+    `;
+
+    document.getElementById('back-btn').addEventListener('click', initApp);
+
+    document.querySelectorAll('.history-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+            const index = parseInt(e.currentTarget.dataset.index);
+            const record = history[index];
+            if (record) {
+                currentGameState.reviewingHistoryIndex = index;
+                currentGameState.hand = [...record.hand];
+                currentGameState.selectedHandSize = record.hand.length;
+                startTrainingSession('進張計算機', true);
+            }
+        });
+    });
+
+    if (currentGameState.reviewingHistoryIndex !== null) {
+        setTimeout(() => {
+            const targetCard = document.querySelector(`.history-card[data-index="${currentGameState.reviewingHistoryIndex}"]`);
+            if (targetCard) {
+                targetCard.scrollIntoView({ behavior: 'auto', block: 'center' });
+            }
+            currentGameState.reviewingHistoryIndex = null;
+        }, 50);
+    }
 }
 
 function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator, tile, index) {

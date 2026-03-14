@@ -11,7 +11,8 @@ const defaultStats = {
     currentStreak: 0,
     maxStreak: 0,
     totalTimeMs: 0,
-    timedDecisions: 0
+    timedDecisions: 0,
+    history: []
 };
 
 /**
@@ -96,4 +97,19 @@ export const clearStats = () => {
     } catch (e) {
         console.error("Error clearing stats from localStorage", e);
     }
+};
+
+/**
+ * Adds a new history record to the beginning of the array, keeping only the last 500.
+ * @param {Object} record { hand: string[], userDiscard: string, isCorrect: boolean, timeMs: number, timestamp: number }
+ */
+export const addHistoryRecord = (record) => {
+    const stats = loadStats();
+    if (!stats.history) stats.history = [];
+    
+    stats.history.unshift(record);
+    if (stats.history.length > 500) {
+        stats.history = stats.history.slice(0, 500);
+    }
+    saveStats(stats);
 };
