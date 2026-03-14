@@ -1,12 +1,16 @@
 const CACHE_NAME = 'mj-trainer-cache-v1.0.0';
 const ASSETS_TO_CACHE = [
-    '/',
-    '/index.html',
-    '/src/js/app.js',
-    '/src/js/storage.js',
-    '/manifest.json'
-    // NOTE: Tailwind CDN is fetched externally, we rely on browser cache for it. 
-    // We'll add tile assets here once they exist.
+    './',
+    './index.html',
+    './src/js/app.js',
+    './src/js/storage.js',
+    './src/js/constants.js',
+    './src/js/engine/shanten.js',
+    './src/js/engine/handGenerator.js',
+    './src/js/components/Tile.js',
+    './manifest.json',
+    './assets/icons/icon.svg',
+    './assets/tailwind.js'
 ];
 
 // Install Event
