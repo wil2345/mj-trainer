@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.1.1)
+# Taiwan Mahjong Trainer - Project Specification (v1.1.5)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
@@ -71,7 +71,7 @@ Unlike full game simulators, this app focuses heavily on **efficiency training**
     ├── constants.js      # Global constants (TILE_NAMES, SUITS, ALL_TILES)
     ├── storage.js        # Abstraction for localStorage operations (stats tracking)
     ├── components/
-    │   └── Tile.js       # UI Component logic for rendering Mahjong tiles (SVG wrappers)
+    │   └── Tile.js       # UI Component logic: Renders tiles using HTML/CSS and Unicode chars
     └── engine/
         ├── handGenerator.js # Logic to generate random, valid hands based on settings
         └── shanten.js       # The Core Engine: DP Algorithm for Shanten calculation
@@ -86,6 +86,9 @@ Tiles are represented as 2-character strings: `[value][suit]`.
 *   **Suits:** `m` (Manzu/Characters), `p` (Pinzu/Circles), `s` (Souzu/Bamboos), `z` (Jihai/Honors).
 *   **Values:** `1-9` for m, p, s. `1-7` for z (East, South, West, North, White, Green, Red).
 *   *Example:* `1m` = 1 Character, `5z` = White Dragon.
+
+**UI Rendering:**
+The application uses pure HTML/CSS and standard Unicode Mahjong characters (e.g., `🀇`, `🀀`) inside `src/js/components/Tile.js` to render the tiles. This approach bypasses cross-platform SVG baseline alignment bugs and ensures perfect vertical centering across all mobile operating systems.
 
 ### Shanten Calculation (Dynamic Programming)
 *   **Shanten (向聴):** The minimum number of tile swaps required to reach a winning state (Tenpai is 0 Shanten, Win is -1 Shanten).
