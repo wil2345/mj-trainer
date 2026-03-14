@@ -21,9 +21,9 @@ export const renderTile = (tileCode, { size = 'md', extraClasses = '', id = '' }
         <div 
             ${id ? `id="${id}"` : ''}
             data-tile="${tileCode}"
-            class="tile-container cursor-pointer transition-transform hover:-translate-y-1 active:scale-95 ${sizeClasses[size]} ${extraClasses}"
+            class="tile-container cursor-pointer transition-all hover:-translate-y-1 active:scale-95 ${sizeClasses[size]} ${extraClasses} border-none bg-transparent"
         >
-            <img src="${tilePath}" alt="${tileCode}" class="w-full h-full pointer-events-none" />
+            <img src="${tilePath}" alt="${tileCode}" class="w-full h-full pointer-events-none block" />
         </div>
     `;
 };

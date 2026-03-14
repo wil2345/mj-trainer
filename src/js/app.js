@@ -1038,8 +1038,8 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
         `;
         
         // Highlight active tile in Calculator
-        document.querySelectorAll('.tile-container').forEach(el => el.classList.remove('ring-4', 'ring-blue-400', 'translate-y-[-8px]'));
-        document.getElementById(`tile-${index}`).classList.add('ring-4', 'ring-blue-400', 'translate-y-[-8px]', 'z-10');
+        document.querySelectorAll('.tile-container').forEach(el => el.classList.remove('scale-110', 'brightness-110', 'translate-y-[-8px]', 'z-10'));
+        document.getElementById(`tile-${index}`).classList.add('scale-110', 'brightness-110', 'translate-y-[-8px]', 'z-10');
 
     } else {
         // Training Feedback
