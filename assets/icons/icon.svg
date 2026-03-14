@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <!-- Emerald Green App Background -->
+    <rect width="512" height="512" rx="100" fill="#10b981"/>
+    
+    <!-- Outer Tile Shadow for depth -->
+    <rect x="96" y="96" width="320" height="340" rx="32" fill="#d1d5db"/>
+    
+    <!-- Main Tile Body -->
+    <rect x="96" y="80" width="320" height="340" rx="32" fill="#fdfbf7"/>
+    
+    <!-- Red Dragon '中' Character -->
+    <g fill="#ef4444">
+        <!-- Vertical stroke (Centered horizontally, spans height) -->
+        <rect x="240" y="130" width="32" height="240" rx="4"/>
+        
+        <!-- Box part '口' (Shifted Upwards) -->
+        <!-- Box Top -->
+        <rect x="170" y="180" width="172" height="24" rx="4"/>
+        <!-- Box Bottom -->
+        <rect x="170" y="260" width="172" height="24" rx="4"/>
+        <!-- Box Left -->
+        <rect x="170" y="180" width="24" height="104" rx="4"/>
+        <!-- Box Right -->
+        <rect x="318" y="180" width="24" height="104" rx="4"/>
+    </g>
+</svg>

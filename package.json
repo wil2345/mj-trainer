@@ -1,0 +1,21 @@
+{
+  "name": "mj-trainer",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "sw.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node tests/engine.test.js",
+    "scrape": "node scripts/scrapeTenhou.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "canvas": "^3.2.1",
+    "puppeteer": "^24.39.1"
+  }
+}

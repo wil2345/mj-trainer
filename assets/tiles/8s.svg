@@ -1,0 +1,16 @@
+<svg width="48" height="64" viewBox="0 0 48 64" xmlns="http://www.w3.org/2000/svg">
+    <!-- Tile Shadow/Depth -->
+    <rect x="2" y="4" width="44" height="60" rx="6" fill="#d1d5db" />
+    <!-- Tile Face -->
+    <rect x="2" y="2" width="44" height="58" rx="6" fill="#fdfbf7" stroke="#9ca3af" stroke-width="0.5" />
+    
+    <!-- Unicode Character -->
+    <text 
+        x="24" 
+        y="32" 
+        text-anchor="middle" 
+        dominant-baseline="central" 
+        font-size="60" 
+        fill="#10b981"
+    >🀗</text>
+</svg>

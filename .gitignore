@@ -1,0 +1,21 @@
+# Dependency directories
+node_modules/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# IDE / Editor folders
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Diagnostic/Temporary files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build/Dist (if added in future)
+dist/
+build/

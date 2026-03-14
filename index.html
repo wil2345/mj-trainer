@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Taiwan Mahjong Trainer</title>
+    
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#10b981"> <!-- Emerald 500 -->
+    <link rel="apple-touch-icon" href="/assets/icons/icon.svg">
+    
+    <!-- Tailwind CSS (Play CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        mj: {
+                            green: '#10b981',
+                            red: '#ef4444',
+                            tile: '#fdfbf7', // slightly off-white tile color
+                        }
+                    },
+                    keyframes: {
+                        'fade-in-up': {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    },
+                    animation: {
+                        'fade-in-up': 'fade-in-up 0.3s ease-out',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        header {
+            padding-top: calc(1rem + env(safe-area-inset-top));
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-900 font-sans antialiased min-h-screen flex flex-col select-none transition-colors duration-200">
+    
+    <header class="bg-mj-green px-4 pb-4 shadow-md sticky top-0 z-50 flex items-center">
+        <div class="container mx-auto flex justify-end items-center relative w-full">
+            <div class="relative">
+                <button id="global-menu-btn" class="p-2 text-emerald-100 hover:text-white rounded-full hover:bg-emerald-600 transition focus:outline-none -mr-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                    </svg>
+                </button>
+                <div id="global-menu-dropdown" class="absolute right-0 mt-1 w-48 bg-white border border-gray-100 rounded-xl shadow-lg z-50 hidden overflow-hidden origin-top-right transform transition-all duration-200 scale-95 opacity-0 text-gray-800">
+                    <button id="reset-stats-btn" class="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-red-50 font-medium flex items-center gap-2 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Reset Statistics
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow p-4 container mx-auto" id="app">
+        <!-- Main Application Content Will Be Injected Here via app.js -->
+        <div class="flex items-center justify-center h-full">
+            <p class="text-lg text-gray-500 animate-pulse">Loading Trainer...</p>
+        </div>
+    </main>
+
+    <!-- Update Toast (Hidden by default) -->
+    <div id="update-toast" class="fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 transform translate-y-20 opacity-0 transition-all duration-300 z-50 pointer-events-none">
+        <span class="text-sm font-medium">New version available!</span>
+        <button id="update-reload-btn" class="bg-white text-emerald-600 px-3 py-1 text-xs font-bold rounded hover:bg-emerald-50 transition active:scale-95 pointer-events-auto">Refresh</button>
+    </div>
+
+    <!-- App Logic -->
+    <script type="module" src="./src/js/app.js"></script>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registered');
+
+                        // Listen for updates to the service worker
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                // Has network content changed and worker finished installing?
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // Show the update toast
+                                    const toast = document.getElementById('update-toast');
+                                    toast.classList.remove('translate-y-20', 'opacity-0');
+                                    toast.classList.add('pointer-events-auto');
+                                    
+                                    document.getElementById('update-reload-btn').addEventListener('click', () => {
+                                        toast.innerHTML = '<span class="text-sm font-medium px-2 py-1">Updating...</span>';
+                                        // Tell the new worker to take over immediately
+                                        newWorker.postMessage('SKIP_WAITING');
+                                    });
+                                }
+                            });
+                        });
+                    })
+                    .catch(err => console.log('ServiceWorker registration failed: ', err));
+
+                // Listen for the controlling worker to change, then reload
+                let refreshing;
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (refreshing) return;
+                    refreshing = true;
+                    window.location.reload();
+                });
+            });
+        }
+    </script>
+</body>
+</html>
