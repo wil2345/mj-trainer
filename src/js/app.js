@@ -175,7 +175,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.1.6</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.1.7</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -274,6 +274,8 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
     let tempSize = currentGameState.selectedHandSize;
     let tempHonors = currentGameState.includeHonors;
     let tempRecordTime = currentGameState.recordTime;
+    
+    const activeColorClass = isCalculator ? 'bg-blue-500' : 'bg-mj-green';
 
     // Build the outer modal structure ONCE
     modalEl.innerHTML = `
@@ -296,7 +298,7 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
                         <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Tile Pool</p>
                         <div id="modal-honors-toggle-wrapper" class="flex items-center justify-between p-3 border border-gray-100 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer select-none">
                             <span class="text-sm text-gray-700 dark:text-gray-300 font-medium">Include Winds & Dragons (字牌)</span>
-                            <div class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${tempHonors ? 'bg-mj-green' : 'bg-gray-200 dark:bg-gray-600'}">
+                            <div class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${tempHonors ? activeColorClass : 'bg-gray-200 dark:bg-gray-600'}">
                                 <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${tempHonors ? 'translate-x-6' : 'translate-x-1'}"></span>
                             </div>
                         </div>
@@ -307,13 +309,13 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
                         <div class="flex flex-col gap-2">
                             <div id="modal-time-toggle-wrapper" class="flex items-center justify-between p-3 border border-gray-100 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer select-none">
                                 <span class="text-sm text-gray-700 dark:text-gray-300 font-medium">Record Time Taken</span>
-                                <div class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${tempRecordTime ? 'bg-mj-green' : 'bg-gray-200 dark:bg-gray-600'}">
+                                <div class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${tempRecordTime ? activeColorClass : 'bg-gray-200 dark:bg-gray-600'}">
                                     <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${tempRecordTime ? 'translate-x-6' : 'translate-x-1'}"></span>
                                 </div>
                             </div>
                             <div id="modal-show-timer-toggle-wrapper" class="flex items-center justify-between p-3 border border-gray-100 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer select-none">
                                 <span class="text-sm text-gray-700 dark:text-gray-300 font-medium">Display Live Timer</span>
-                                <div class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${currentGameState.showTimer ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-600'}">
+                                <div class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${currentGameState.showTimer ? activeColorClass : 'bg-gray-200 dark:bg-gray-600'}">
                                     <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${currentGameState.showTimer ? 'translate-x-6' : 'translate-x-1'}"></span>
                                 </div>
                             </div>
@@ -360,11 +362,11 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
         
         if (tempHonors) {
             track.classList.remove('bg-gray-200', 'dark:bg-gray-600');
-            track.classList.add('bg-mj-green');
+            track.classList.add(activeColorClass);
             knob.classList.remove('translate-x-1');
             knob.classList.add('translate-x-6');
         } else {
-            track.classList.remove('bg-mj-green');
+            track.classList.remove(activeColorClass);
             track.classList.add('bg-gray-200', 'dark:bg-gray-600');
             knob.classList.remove('translate-x-6');
             knob.classList.add('translate-x-1');
@@ -380,11 +382,11 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
 
         if (tempRecordTime) {
             track.classList.remove('bg-gray-200', 'dark:bg-gray-600');
-            track.classList.add('bg-mj-green');
+            track.classList.add(activeColorClass);
             knob.classList.remove('translate-x-1');
             knob.classList.add('translate-x-6');
         } else {
-            track.classList.remove('bg-mj-green');
+            track.classList.remove(activeColorClass);
             track.classList.add('bg-gray-200', 'dark:bg-gray-600');
             knob.classList.remove('translate-x-6');
             knob.classList.add('translate-x-1');
@@ -399,11 +401,11 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
         
         if (currentGameState.showTimer) {
             track.classList.remove('bg-gray-200', 'dark:bg-gray-600');
-            track.classList.add('bg-blue-500');
+            track.classList.add(activeColorClass);
             knob.classList.remove('translate-x-1');
             knob.classList.add('translate-x-6');
         } else {
-            track.classList.remove('bg-blue-500');
+            track.classList.remove(activeColorClass);
             track.classList.add('bg-gray-200', 'dark:bg-gray-600');
             knob.classList.remove('translate-x-6');
             knob.classList.add('translate-x-1');
