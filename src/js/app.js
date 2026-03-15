@@ -185,7 +185,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.4</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.5</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -1797,12 +1797,11 @@ function renderVsArena() {
         // Reveal if it's not Ankan, or if it IS Ankan but showAiHand or isGameOver is true
         const shouldShow = !isAnkan || !isAi || showAiHand || isGameOver;
         return `
-            <div class="flex border border-gray-200 rounded p-0.5 bg-gray-50 sm:w-auto w-[calc(50%-0.25rem)] justify-center gap-0.5">
+            <div class="flex border border-gray-200 rounded p-0.5 bg-gray-50 w-fit justify-center gap-0.5">      
                 ${tiles.map(t => renderTile(t, { size: 'xs', faceDown: !shouldShow })).join('')}
             </div>
         `;
-    }).join('');
-
+        }).join('');
     const isAiTenpai = calculateShanten(ai.closed, ai.open.length) === 0;
     
     // Check for player's self-actions (Ankan/Kakan) during their turn
@@ -1868,26 +1867,24 @@ function renderVsArena() {
 
             <!-- AI Area -->
             <div class="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-2">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="flex flex-col gap-1.5">
-                        <div class="flex items-center gap-2">
-                            <div class="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-[10px] font-bold">AI</div>
-                            ${currentGameState.showAiTenpai && isAiTenpai ? '<span class="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded animate-pulse shadow-sm">聽牌</span>' : ''}
-                        </div>
-                        <div class="flex flex-wrap gap-1 min-h-[24px] max-w-full" id="ai-open-melds">
-                            ${renderOpenMelds(ai.open, true)}
-                        </div>
+                <div class="flex justify-between items-center mb-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-[10px] font-bold">AI</div>
+                        ${currentGameState.showAiTenpai && isAiTenpai ? '<span class="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded animate-pulse shadow-sm">聽牌</span>' : ''}
                     </div>
                     
-                    <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
-                        <div class="flex items-center gap-2">
-                            <button id="toggle-ai-hand-btn" class="text-[10px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition whitespace-nowrap">
-                                ${showAiHand ? 'Hide Hand' : 'Show Hand'}
-                            </button>
-                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">${ai.closed.length} Tiles</span>
-                        </div>
+                    <div class="flex items-center gap-2">
+                        <button id="toggle-ai-hand-btn" class="text-[10px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition whitespace-nowrap">
+                            ${showAiHand ? 'Hide Hand' : 'Show Hand'}
+                        </button>
+                        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">${ai.closed.length} Tiles</span>
                     </div>
                 </div>
+                
+                <div class="flex flex-wrap gap-1 min-h-[24px] max-w-full mb-2" id="ai-open-melds">
+                    ${renderOpenMelds(ai.open, true)}
+                </div>
+                
                 <!-- AI Hand -->
                 <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-center mb-2" id="ai-hand-container">
                     ${ai.closed.map(t => renderTile(t, { size: 'xs', faceDown: !showAiHand && !isGameOver })).join('')}
@@ -1942,12 +1939,15 @@ function renderVsArena() {
 
             <!-- Player Area -->
             <div class="w-full bg-white rounded-xl shadow-md border-t-4 border-orange-500 p-3">
-                <div class="flex justify-between items-start mb-3">
-                    <div class="flex flex-wrap gap-1 max-w-[70%]" id="player-open-melds">
-                        ${renderOpenMelds(player.open)}
-                    </div>
-                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex-shrink-0">Your Hand</span>
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your Hand</span>
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">${player.closed.length} Tiles</span>
                 </div>
+                
+                <div class="flex flex-wrap gap-1 min-h-[24px] max-w-full mb-3" id="player-open-melds">
+                    ${renderOpenMelds(player.open)}
+                </div>
+
                 <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-center" id="vs-hand-container">
                     ${player.closed.map((t, i) => renderTile(t, { 
                         size: 'sm', 
@@ -2504,9 +2504,16 @@ function showSeedModal() {
                 <h3 class="font-bold text-gray-800 mb-2 text-center text-lg">Match Seed</h3>
                 <p class="text-xs text-gray-500 mb-4 text-center">Enter a custom seed to replay a specific match.</p>
                 
-                <input type="number" id="seed-input" 
-                    class="w-full border-2 border-gray-100 rounded-xl px-4 py-3 text-center font-mono text-xl focus:border-purple-500 focus:outline-none transition-colors mb-4"
-                    placeholder="e.g. 123456" value="${vsGameState.currentSeed}">
+                <div class="relative mb-4">
+                    <input type="number" id="seed-input" step="1"
+                        class="w-full border-2 border-gray-100 rounded-xl px-4 py-3 text-center font-mono text-xl focus:border-purple-500 focus:outline-none transition-colors"
+                        placeholder="e.g. 123456" value="${vsGameState.currentSeed}">
+                    <button id="copy-seed-btn" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-purple-600 transition" title="Copy Seed">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                    </button>
+                </div>
                 
                 <div class="flex gap-2">
                     <button id="close-seed-modal" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl transition">
@@ -2524,9 +2531,19 @@ function showSeedModal() {
         modalEl.innerHTML = '';
     });
 
+    document.getElementById('copy-seed-btn').addEventListener('click', () => {
+        const input = document.getElementById('seed-input');
+        navigator.clipboard.writeText(input.value).then(() => {
+            const btn = document.getElementById('copy-seed-btn');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-mj-green" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
+            setTimeout(() => btn.innerHTML = originalHtml, 2000);
+        });
+    });
+
     document.getElementById('apply-seed-btn').addEventListener('click', () => {
         const input = document.getElementById('seed-input');
-        const val = parseInt(input.value);
+        const val = Math.floor(parseFloat(input.value));
         if (!isNaN(val)) {
             modalEl.innerHTML = '';
             startVsMode(val);
