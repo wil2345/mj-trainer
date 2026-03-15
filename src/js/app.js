@@ -185,7 +185,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.1</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.2</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -2120,7 +2120,9 @@ function showChiModal(options, tile) {
 function executeChi(opt, tile) {
     vsGameState.player.closed.splice(vsGameState.player.closed.indexOf(opt[0]), 1);
     vsGameState.player.closed.splice(vsGameState.player.closed.indexOf(opt[1]), 1);
-    vsGameState.player.open.push(sortHand([...opt, tile]));
+    // Display stolen tile in the middle: [opt[0], stolen, opt[1]]
+    // opt is already sorted from getChiOptions, so we just place tile in between
+    vsGameState.player.open.push([opt[0], tile, opt[1]]);
     vsGameState.trajectory.push({ actor: 'player', action: 'chi', tile });
     vsGameState.pendingAction = null;
     vsGameState.currentTurn = 'player';
@@ -2153,7 +2155,7 @@ function vsPlayerDiscard(index) {
     }
 
     // Trigger AI Turn
-    setTimeout(vsAiTurn, 1000);
+    vsAiTurn();
 }
 
 function checkAiInterrupt(tile) {
@@ -2237,7 +2239,8 @@ function checkAiInterrupt(tile) {
         if (evaluateCall(tempHand, vsGameState.ai.open.length + 1)) {
             // AI Chis
             vsGameState.ai.closed = sortHand(tempHand);
-            vsGameState.ai.open.push(sortHand([...opt, tile]));
+            // Display stolen tile in the middle: [opt[0], stolen, opt[1]]
+            vsGameState.ai.open.push([opt[0], tile, opt[1]]);
             vsGameState.trajectory.push({ actor: 'ai', action: 'chi', tile: tile });
             vsGameState.latestDiscard = null; // Clear latest discard since it was stolen
             vsGameState.currentTurn = 'ai';
@@ -2312,9 +2315,6 @@ function runMCEvaluation(hand, discard, runs, maxDraws, includeHonors) {
 }
 
 async function vsAiDiscard() {
-    // Artificial delay for realism
-    await new Promise(r => setTimeout(r, 1000));
-
     // Rule: AI cannot discard the tile it just called (forbiddenDiscard)
     const allowedClosedHand = vsGameState.ai.closed.filter(t => t !== vsGameState.forbiddenDiscard);
     const analysis = getDiscardAnalysis(vsGameState.ai.closed, vsGameState.ai.open.length)

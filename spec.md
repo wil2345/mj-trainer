@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.3.1)
+# Taiwan Mahjong Trainer - Project Specification (v1.3.2)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
@@ -58,9 +58,11 @@ Beyond isolated efficiency training, the app features a full 1-on-1 AI Arena to 
     *   **Show AI Tenpai Indicator:** Toggles a red "聽牌" badge when the AI is one tile from winning.
 *   **Advanced Features:**
     *   **Expert MC Logic:** The Expert AI uses internal Monte Carlo simulations for endgame hands (8 or fewer tiles) to evaluate the best long-term discard.
+    *   **Zero-Delay Execution:** AI performs evaluations and actions instantly, providing an immediate and continuous feedback loop for fast-paced training.
     *   **Undo (悔棋):** Step back to previous moves to correct mistakes or test different strategies.
     *   **Seeded Matches:** Every game has a unique numeric seed, allowing matches to be perfectly reproduced and shared.
     *   **Feedback:** Phone-style notifications for all AI actions and high-visibility highlighting for the latest discarded tiles.
+    *   **Accurate Melds:** Open melds correctly reflect standard rules by displaying the "stolen" tile visually in the center of the set (e.g., placing the called `4s` between a `5s` and `6s` in a Chi).
     *   **Realism:** AI Ankan tiles remain hidden until game-over or manual "Show Hand" toggle.
 
 ### E. Monte Carlo Simulation Mode (蒙地卡羅演算法)
