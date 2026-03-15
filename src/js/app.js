@@ -185,7 +185,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.3</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.4</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -676,7 +676,7 @@ function renderGameScene() {
                 <div class="flex gap-1.5 sm:gap-2 items-center flex-shrink-0">
                     ${(!isCalculator && currentGameState.showTimer && !isResolved) ? `
                         <div class="bg-gray-800 text-white text-xs font-black px-3 py-1.5 rounded flex items-center shadow-inner min-w-[75px] justify-center mr-1">
-                            â±ï¸<span id="live-timer-display" class="font-mono w-[4ch] text-right inline-block tracking-tighter">0.0</span><span class="ml-0.5">s</span>
+                            ⏱️<span id="live-timer-display" class="font-mono w-[4ch] text-right inline-block tracking-tighter">0.0</span><span class="ml-0.5">s</span>
                         </div>
                     ` : ''}
                     
@@ -740,7 +740,7 @@ function renderGameScene() {
                 <div id="feedback-container" class="flex flex-col items-center justify-center w-full">
                     ${isWin ? `
                         <div class="animate-fade-in-up w-full flex flex-col items-center py-2">
-                            <h3 class="text-3xl font-black text-yellow-500 mb-1 tracking-widest drop-shadow-sm">èƒ¡ç‰Œ</h3>
+                            <h3 class="text-3xl font-black text-yellow-500 mb-1 tracking-widest drop-shadow-sm">胡牌</h3>
                             <p class="text-xs text-gray-500 mb-4 font-medium">This is already a winning hand!</p>
                             <button id="next-btn" class="bg-mj-green text-white text-sm font-bold px-8 py-2.5 rounded-lg shadow-md hover:bg-emerald-600 transition active:scale-95">
                                 Next Hand
@@ -831,7 +831,7 @@ function renderGameScene() {
                 currentGameState.mcDraws = 5;
                 currentGameState.mcRuns = 1000;
                 currentGameState.reviewingHistoryIndex = null; // Exit review context
-                startTrainingSession('è’™åœ°å¡ç¾…æ¼”ç®—æ³•', true, true);
+                startTrainingSession('蒙地卡羅演算法', true, true);
             });
         }
         
@@ -844,7 +844,7 @@ function renderGameScene() {
                 currentGameState.mcDraws = 5;
                 currentGameState.mcRuns = 1000;
                 currentGameState.reviewingHistoryIndex = null; // Exit review context
-                startTrainingSession('è’™åœ°å¡ç¾…æ¼”ç®—æ³•', true, true);
+                startTrainingSession('蒙地卡羅演算法', true, true);
             });
         }
     }
@@ -1238,16 +1238,16 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                     
                     <div class="flex items-center gap-4 bg-gray-50 px-4 py-2 rounded-lg border border-gray-100 shadow-inner w-full justify-center">
                         <div class="text-center min-w-[60px]">
-                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">ç‹€æ…‹</p>
+                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">狀態</p>
                             <p class="text-xl font-black tracking-tight ${userMove.shanten === 0 ? 'text-mj-red' : 'text-blue-600'}">
-                                ${userMove.shanten === 0 ? 'è½ç‰Œ' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">å‘è½</span>`}
+                                ${userMove.shanten === 0 ? '聽牌' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">向聽</span>`}
                             </p>
                         </div>
                         <div class="w-px h-8 bg-gray-300 rounded"></div>
                         <div class="text-center min-w-[60px]">
-                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">é€²å¼µ</p>
+                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">鬲張</p>
                             <p class="text-xl font-black text-blue-500 tracking-tight">
-                                ${userMove.acceptedTiles.length}<span class="text-xs font-bold text-gray-400 mx-0.5">æ¬¾</span>${userMove.acceptance}<span class="text-xs font-bold text-gray-400 mx-0.5">å¼µ</span>
+                                ${userMove.acceptedTiles.length}<span class="text-xs font-bold text-gray-400 mx-0.5">款</span>${userMove.acceptance}<span class="text-xs font-bold text-gray-400 mx-0.5">張</span>
                             </p>
                         </div>
                     </div>
@@ -1299,16 +1299,16 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
 
                     <div class="flex items-center gap-4 bg-gray-50 px-4 py-2 rounded-lg border border-gray-100 shadow-inner w-full justify-center">
                         <div class="text-center min-w-[60px]">
-                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">ç‹€æ…‹</p>
+                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">狀態</p>
                             <p class="text-xl font-black tracking-tight ${userMove.shanten === 0 ? 'text-mj-red' : 'text-blue-600'}">
-                                ${userMove.shanten === 0 ? 'è½ç‰Œ' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">å‘è½</span>`}
+                                ${userMove.shanten === 0 ? '聽牌' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">向聽</span>`}
                             </p>
                         </div>
                         <div class="w-px h-8 bg-gray-300 rounded"></div>
                         <div class="text-center min-w-[60px]">
-                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">é€²å¼µ</p>
+                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">鬲張</p>
                             <p class="text-xl font-black text-blue-500 tracking-tight">
-                                ${userMove.acceptedTiles.length}<span class="text-xs font-bold text-gray-400 mx-0.5">æ¬¾</span>${userMove.acceptance}<span class="text-xs font-bold text-gray-400 mx-0.5">å¼µ</span>
+                                ${userMove.acceptedTiles.length}<span class="text-xs font-bold text-gray-400 mx-0.5">款</span>${userMove.acceptance}<span class="text-xs font-bold text-gray-400 mx-0.5">張</span>
                             </p>
                         </div>
                     </div>
@@ -1332,16 +1332,16 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                             
                             <div class="flex items-center gap-4 bg-emerald-50/50 px-4 py-2 rounded-lg border border-emerald-100 w-full justify-center mb-1">
                                 <div class="text-center min-w-[60px]">
-                                    <p class="text-[10px] text-emerald-600 font-bold mb-0.5">ç‹€æ…‹</p>
+                                    <p class="text-[10px] text-emerald-600 font-bold mb-0.5">狀態</p>
                                     <p class="text-xl font-black tracking-tight ${bestMove.shanten === 0 ? 'text-mj-red' : 'text-emerald-700'}">
-                                        ${bestMove.shanten === 0 ? 'è½ç‰Œ' : `${bestMove.shanten}<span class="text-xs font-bold ml-0.5 text-emerald-600">å‘è½</span>`}
+                                        ${bestMove.shanten === 0 ? '聽牌' : `${bestMove.shanten}<span class="text-xs font-bold ml-0.5 text-emerald-600">向聽</span>`}
                                     </p>
                                 </div>
                                 <div class="w-px h-8 bg-emerald-200 rounded"></div>
                                 <div class="text-center min-w-[60px]">
-                                    <p class="text-[10px] text-emerald-600 font-bold mb-0.5">é€²å¼µ</p>
+                                    <p class="text-[10px] text-emerald-600 font-bold mb-0.5">鬲張</p>
                                     <p class="text-xl font-black text-emerald-600 tracking-tight">
-                                        ${bestMove.acceptedTiles.length}<span class="text-xs font-bold text-emerald-400 mx-0.5">æ¬¾</span>${bestMove.acceptance}<span class="text-xs font-bold text-emerald-400 mx-0.5">å¼µ</span>
+                                        ${bestMove.acceptedTiles.length}<span class="text-xs font-bold text-emerald-400 mx-0.5">款</span>${bestMove.acceptance}<span class="text-xs font-bold text-emerald-400 mx-0.5">張</span>
                                     </p>
                                 </div>
                             </div>
@@ -1398,11 +1398,11 @@ function getMCResultsHtml(stats) {
     const finalHandsHtml = topFinalHands.length > 0 ? topFinalHands.map((item, idx) => {
         let shantenBadge = '';
         if (item.shanten === -1) {
-            shantenBadge = '<span class="bg-yellow-400 text-white text-[11px] font-black px-2 py-1 rounded shadow-sm whitespace-nowrap">ç³Šç‰Œ</span>';
+            shantenBadge = '<span class="bg-yellow-400 text-white text-[11px] font-black px-2 py-1 rounded shadow-sm whitespace-nowrap">胡牌</span>';
         } else if (item.shanten === 0) {
-            shantenBadge = '<span class="bg-red-500 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">è½ç‰Œ</span>';
+            shantenBadge = '<span class="bg-red-500 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">聽牌</span>';
         } else {
-            shantenBadge = `<span class="bg-gray-400 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">${item.shanten}å‘è½</span>`;
+            shantenBadge = `<span class="bg-gray-400 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">${item.shanten}向聽</span>`;
         }
 
         return `
