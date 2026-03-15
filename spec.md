@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.2.0)
+# Taiwan Mahjong Trainer - Project Specification (v1.2.1)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
@@ -36,7 +36,7 @@ Unlike full game simulators, this app focuses heavily on **efficiency training**
 *   **Objective:** The user is presented with a random, valid Mahjong hand. They must select the tile to discard that gives them the highest number of acceptable drawn tiles to advance their hand.
 *   **Settings Modal:** Users can adjust settings before starting:
     *   **Hand Sizes:** 5, 8, 11, 14, and 17 tiles. (Defaults to 8).
-    *   **Tile Pool:** Option to include or exclude Winds & Dragons (Honors).
+    *   **Tile Pool:** Option to include or exclude Winds & Dragons (Honors). **Defaults to Off**.
     *   **Record Time Taken:** Toggles whether the decision time is logged to the dashboard's "Average Time" stat.
     *   **Display Live Timer:** Toggles a live `0.0s` clock in the header during the game.
 *   **Feedback:** Analyzes the discard, showing:
@@ -53,6 +53,7 @@ Unlike full game simulators, this app focuses heavily on **efficiency training**
     *   The bot uses a "greedy" approach, always calculating and discarding the tile that offers the mathematically optimal immediate acceptance at every step of the simulation.
 *   **Settings Modal:**
     *   **Hand Sizes:** 3, 5, and 8 tiles.
+    *   **Tile Pool:** Option to include or exclude Winds & Dragons. **Defaults to On**.
     *   **Max Draws:** The limit of turns simulated per run (3, 5, 7, or 10 draws).
     *   **Iterations:** The number of times the simulation is run (100, 1,000, 5,000, or 10,000 runs).
 *   **Performance (Multi-Threading):** 

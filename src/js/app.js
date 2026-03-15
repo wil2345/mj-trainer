@@ -181,7 +181,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.2.0</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.2.1</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -273,10 +273,12 @@ function initApp() {
 
     // Remove old reset button and dark mode logic from here as it is either global or removed
     document.getElementById('btn-trainer').addEventListener('click', () => {
+        currentGameState.includeHonors = false; // Default off for Training
         showSettingsModal('最大機率打法', false, false);
     });
 
     document.getElementById('btn-calc').addEventListener('click', () => {
+        currentGameState.includeHonors = false; // Default off for Calculator
         showSettingsModal('進張計算機', true, false);
     });
 
