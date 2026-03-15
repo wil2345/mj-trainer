@@ -13,12 +13,18 @@ let currentGameState = {
     isResolved: false,
     selectedHandSize: 8,
     isCalculator: false,
+    isMCMode: false,
     isEditing: false,
     includeHonors: false,
     recordTime: false,
     showTimer: false,
     handStartTime: 0,
-    reviewingHistoryIndex: null
+    reviewingHistoryIndex: null,
+    enableMC: false,
+    mcDraws: 5,
+    mcRuns: 1000,
+    isMCRunning: false,
+    mcCache: {}
 };
 
 let liveTimerInterval = null;
@@ -175,7 +181,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.1.7</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.2.0</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -249,6 +255,18 @@ function initApp() {
                         </svg>
                     </div>
                 </div>
+
+                <div id="btn-mc" class="bg-white p-5 rounded-xl shadow-md border border-gray-200 flex items-center justify-between cursor-pointer hover:border-purple-500 hover:shadow-lg transition group">
+                    <div class="text-left">
+                        <p class="font-bold text-gray-800 text-lg">蒙地卡羅演算法</p>
+                        <p class="text-xs text-gray-500 mt-1">Deep simulation for sub-hands.</p>
+                    </div>
+                    <div class="bg-purple-50 group-hover:bg-purple-500 p-3 rounded-xl transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                        </svg>
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -261,9 +279,14 @@ function initApp() {
     document.getElementById('btn-calc').addEventListener('click', () => {
         showSettingsModal('進張計算機', true, false);
     });
+
+    document.getElementById('btn-mc').addEventListener('click', () => {
+        currentGameState.includeHonors = true; // Default to true for MC mode
+        showSettingsModal('蒙地卡羅演算法', true, false, true); // (mode, isCalc, isUpdate, isMCMode)
+    });
 }
 
-function showSettingsModal(modeName, isCalculator, isUpdate) {
+function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
     let modalEl = document.getElementById('settings-modal-root');
     if (!modalEl) {
         modalEl = document.createElement('div');
@@ -274,14 +297,23 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
     let tempSize = currentGameState.selectedHandSize;
     let tempHonors = currentGameState.includeHonors;
     let tempRecordTime = currentGameState.recordTime;
+    let tempEnableMC = currentGameState.enableMC || false;
+    let tempMCDraws = currentGameState.mcDraws || 5;
+    let tempMCRuns = currentGameState.mcRuns || 1000;
     
-    const activeColorClass = isCalculator ? 'bg-blue-500' : 'bg-mj-green';
+    const activeColorClass = isMCMode ? 'bg-purple-500' : (isCalculator ? 'bg-blue-500' : 'bg-mj-green');
+    const sizes = isMCMode ? [3, 5, 8] : [5, 8, 11, 14, 17];
+    
+    // Ensure current size is valid for the mode
+    if (!sizes.includes(tempSize)) {
+        tempSize = sizes.includes(8) ? 8 : sizes[sizes.length - 1];
+    }
 
     // Build the outer modal structure ONCE
     modalEl.innerHTML = `
         <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-fade-in-up transition-colors">
-                <div class="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl animate-fade-in-up transition-colors">
+                <div class="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50 sticky top-0 z-10">
                     <h3 class="font-bold text-gray-800 dark:text-white">${isUpdate ? 'Settings' : 'Setup ' + modeName}</h3>
                     <button id="close-settings" class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 bg-gray-200/50 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full p-1 transition">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -303,7 +335,7 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
                             </div>
                         </div>
                     </div>
-                    ${!isCalculator ? `
+                    ${!isCalculator && !isMCMode ? `
                     <div>
                         <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Time</p>
                         <div class="flex flex-col gap-2">
@@ -322,9 +354,35 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
                         </div>
                     </div>
                     ` : ''}
+                    
+                    ${isMCMode ? `
+                    <div>
+                        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Simulation Settings</p>
+                        <div class="grid grid-cols-2 gap-3 border border-gray-100 dark:border-gray-700 rounded-xl p-3 bg-gray-50/50 dark:bg-gray-800/50">
+                            <div class="flex flex-col">
+                                <label class="text-[11px] font-bold text-gray-400 mb-1">Max Draws</label>
+                                <select id="mc-draws-select" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-purple-500">
+                                    <option value="3" ${tempMCDraws === 3 ? 'selected' : ''}>3</option>
+                                    <option value="5" ${tempMCDraws === 5 ? 'selected' : ''}>5</option>
+                                    <option value="7" ${tempMCDraws === 7 ? 'selected' : ''}>7</option>
+                                    <option value="10" ${tempMCDraws === 10 ? 'selected' : ''}>10</option>
+                                </select>
+                            </div>
+                            <div class="flex flex-col">
+                                <label class="text-[11px] font-bold text-gray-400 mb-1">Iterations</label>
+                                <select id="mc-runs-select" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-purple-500">
+                                    <option value="100" ${tempMCRuns === 100 ? 'selected' : ''}>100</option>
+                                    <option value="1000" ${tempMCRuns === 1000 ? 'selected' : ''}>1,000</option>
+                                    <option value="5000" ${tempMCRuns === 5000 ? 'selected' : ''}>5,000</option>
+                                    <option value="10000" ${tempMCRuns === 10000 ? 'selected' : ''}>10,000</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
                 </div>
-                <div class="p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800">
-                    <button id="apply-settings" class="${isCalculator ? 'bg-blue-500 hover:bg-blue-600' : 'bg-mj-green hover:bg-emerald-600'} text-white font-bold px-6 py-3 rounded-xl shadow-md transition active:scale-95 w-full">
+                <div class="p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 sticky bottom-0 z-10">
+                    <button id="apply-settings" class="${activeColorClass} hover:opacity-90 text-white font-bold px-6 py-3 rounded-xl shadow-md transition active:scale-95 w-full">
                         ${isUpdate ? 'Apply & Restart Hand' : 'Start'}
                     </button>
                 </div>
@@ -335,8 +393,8 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
     const updateSizeButtons = () => {
         const container = document.getElementById('modal-size-container');
         if (!container) return;
-        container.innerHTML = [5, 8, 11, 14, 17].map(s => `
-            <button class="modal-size-btn flex-1 py-2 rounded-xl text-sm font-bold transition ${tempSize === s ? (isCalculator ? 'bg-blue-500' : 'bg-mj-green') + ' text-white shadow-md' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}" data-size="${s}">
+        container.innerHTML = sizes.map(s => `
+            <button class="modal-size-btn flex-1 py-2 rounded-xl text-sm font-bold transition ${tempSize === s ? activeColorClass + ' text-white shadow-md' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}" data-size="${s}">
                 ${s}
             </button>
         `).join('');
@@ -440,23 +498,70 @@ function showSettingsModal(modeName, isCalculator, isUpdate) {
         });
     }
 
+    const mcToggleWrapper = document.getElementById('modal-mc-toggle-wrapper');
+    if (mcToggleWrapper) {
+        mcToggleWrapper.addEventListener('click', () => {
+            tempEnableMC = !tempEnableMC;
+            const track = mcToggleWrapper.querySelector('.transition-colors');
+            const knob = mcToggleWrapper.querySelector('.transition-transform');
+            const optionsContainer = document.getElementById('mc-options-container');
+            
+            if (tempEnableMC) {
+                track.classList.remove('bg-gray-200', 'dark:bg-gray-600');
+                track.classList.add(activeColorClass);
+                knob.classList.remove('translate-x-1');
+                knob.classList.add('translate-x-6');
+                optionsContainer.classList.remove('hidden');
+                optionsContainer.classList.add('grid');
+            } else {
+                track.classList.remove(activeColorClass);
+                track.classList.add('bg-gray-200', 'dark:bg-gray-600');
+                knob.classList.remove('translate-x-6');
+                knob.classList.add('translate-x-1');
+                optionsContainer.classList.remove('grid');
+                optionsContainer.classList.add('hidden');
+            }
+        });
+    }
+
+    const mcDrawsSelect = document.getElementById('mc-draws-select');
+    if (mcDrawsSelect) {
+        mcDrawsSelect.addEventListener('change', (e) => {
+            tempMCDraws = parseInt(e.target.value);
+        });
+    }
+
+    const mcRunsSelect = document.getElementById('mc-runs-select');
+    if (mcRunsSelect) {
+        mcRunsSelect.addEventListener('change', (e) => {
+            tempMCRuns = parseInt(e.target.value);
+        });
+    }
+
     document.getElementById('apply-settings').addEventListener('click', () => {
         currentGameState.selectedHandSize = tempSize;
         currentGameState.includeHonors = tempHonors;
         currentGameState.recordTime = tempRecordTime;
+        currentGameState.enableMC = isMCMode ? true : false;
+        currentGameState.isMCMode = isMCMode;
+        if (isMCMode) {
+            currentGameState.mcDraws = tempMCDraws;
+            currentGameState.mcRuns = tempMCRuns;
+        }
         modalEl.innerHTML = '';
         
         if (isUpdate) {
             currentGameState.hand = [];
         }
         
-        startTrainingSession(modeName, isCalculator);
+        startTrainingSession(modeName, isCalculator, isMCMode);
     });
 }
 
-function startTrainingSession(modeName, isCalculator = false) {
+function startTrainingSession(modeName, isCalculator = false, isMCMode = false) {
     currentGameState.mode = modeName;
     currentGameState.isCalculator = isCalculator;
+    currentGameState.isMCMode = isMCMode;
     currentGameState.isEditing = false;
     
     // Clear any existing timer
@@ -508,6 +613,7 @@ function renderGameScene() {
 
     const isWin = isWinningHand(hand);
     const isReviewing = currentGameState.reviewingHistoryIndex !== null;
+    const isMC = currentGameState.isMCMode;
     const stats = loadStats();
     const history = stats.history || [];
     
@@ -526,16 +632,27 @@ function renderGameScene() {
 
     appContainer.innerHTML = `
         <div class="flex flex-col items-center justify-start h-full max-w-4xl mx-auto mt-2 px-2">
-            <div class="w-full flex justify-between items-center mb-3">
-                <h2 class="text-lg font-bold text-gray-800 leading-none truncate">${displayTitle}</h2>
-                <div class="flex gap-2 sm:gap-3 items-center">
+            <div class="w-full flex justify-between items-center mb-3 gap-2">
+                <h2 class="text-lg font-bold text-gray-800 leading-none truncate flex items-center gap-2">
+                    ${displayTitle}
+                </h2>
+                <div class="flex gap-1.5 sm:gap-2 items-center flex-shrink-0">
                     ${(!isCalculator && currentGameState.showTimer && !isResolved) ? `
-                        <div class="bg-gray-800 text-white text-xs font-black px-3 py-1.5 rounded flex items-center shadow-inner min-w-[75px] justify-center">
+                        <div class="bg-gray-800 text-white text-xs font-black px-3 py-1.5 rounded flex items-center shadow-inner min-w-[75px] justify-center mr-1">
                             ⏱️<span id="live-timer-display" class="font-mono w-[4ch] text-right inline-block tracking-tighter">0.0</span><span class="ml-0.5">s</span>
                         </div>
                     ` : ''}
+                    
+                    ${isCalculator && !isMC && hand.length <= 8 ? `
+                        <button id="header-to-mc-btn" class="bg-purple-50 text-purple-600 hover:text-purple-800 border border-purple-100 p-1.5 rounded-lg transition flex items-center justify-center shadow-sm" title="Run Monte Carlo Simulation">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                            </svg>
+                        </button>
+                    ` : ''}
+
                     ${isReviewing ? '' : `
-                    <button id="open-settings-btn" class="text-xs font-medium text-emerald-600 hover:text-emerald-800 flex items-center gap-1 bg-emerald-50 px-2 py-1.5 rounded transition border border-emerald-100" title="Settings">
+                    <button id="open-settings-btn" class="text-xs font-medium ${isMC ? 'text-purple-600 hover:text-purple-800 bg-purple-50 border-purple-100' : (isCalculator ? 'text-blue-600 hover:text-blue-800 bg-blue-50 border-blue-100' : 'text-emerald-600 hover:text-emerald-800 bg-emerald-50 border-emerald-100')} flex items-center gap-1 px-2 py-1.5 rounded transition border" title="Settings">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -558,14 +675,14 @@ function renderGameScene() {
                 </div>
             </div>
 
-            <div class="bg-white p-3 md:p-5 rounded-xl shadow-lg border-t-4 ${isWin ? 'border-yellow-400' : (isCalculator ? 'border-blue-500' : 'border-mj-green')} w-full text-center flex flex-col mb-2 transition-colors">
+            <div class="bg-white p-3 md:p-5 rounded-xl shadow-lg border-t-4 ${isWin ? 'border-yellow-400' : (isMC ? 'border-purple-500' : (isCalculator ? 'border-blue-500' : 'border-mj-green'))} w-full text-center flex flex-col mb-2 transition-colors">
                 
                 ${isCalculator ? `
                     <div class="flex flex-wrap justify-between items-center bg-gray-50 p-2 rounded-lg mb-3 gap-2 transition-colors">
-                        <p class="text-xs text-gray-500 font-medium whitespace-nowrap text-left hidden sm:block">${isReviewing ? 'Analyzing past hand:' : 'Click tile to analyze:'}</p>
+                        <p class="text-xs text-gray-500 font-medium whitespace-nowrap text-left hidden sm:block">${isReviewing ? 'Analyzing past hand:' : (isMC ? 'Click a discard to simulate:' : 'Click tile to analyze:')}</p>
                         <div class="flex gap-2 w-full sm:w-auto justify-center">
                             ${isReviewing ? '' : `
-                            <button id="calc-edit-btn" class="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-bold rounded shadow-sm transition flex items-center gap-1">
+                            <button id="calc-edit-btn" class="px-2 py-1 ${isMC ? 'bg-purple-100 hover:bg-purple-200 text-purple-700' : 'bg-blue-100 hover:bg-blue-200 text-blue-700'} text-xs font-bold rounded shadow-sm transition flex items-center gap-1">
                                 Edit
                             </button>
                             <button id="calc-refresh-btn" class="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-gray-700 shadow-sm transition flex items-center gap-1 text-xs font-bold">
@@ -614,7 +731,7 @@ function renderGameScene() {
     const settingsBtn = document.getElementById('open-settings-btn');
     if (settingsBtn) {
         settingsBtn.addEventListener('click', () => {
-            showSettingsModal(currentGameState.mode, currentGameState.isCalculator, true);
+            showSettingsModal(currentGameState.mode, currentGameState.isCalculator, true, currentGameState.isMCMode);
         });
     }
 
@@ -664,6 +781,32 @@ function renderGameScene() {
                 renderGameScene();
             });
         }
+        
+        const toMCBtn = document.getElementById('calc-to-mc-btn');
+        if (toMCBtn) {
+            toMCBtn.addEventListener('click', () => {
+                // Ensure MC default settings are set
+                currentGameState.includeHonors = true;
+                currentGameState.enableMC = true;
+                currentGameState.mcDraws = 5;
+                currentGameState.mcRuns = 1000;
+                currentGameState.reviewingHistoryIndex = null; // Exit review context
+                startTrainingSession('蒙地卡羅演算法', true, true);
+            });
+        }
+        
+        const headerToMCBtn = document.getElementById('header-to-mc-btn');
+        if (headerToMCBtn) {
+            headerToMCBtn.addEventListener('click', () => {
+                // Ensure MC default settings are set
+                currentGameState.includeHonors = true;
+                currentGameState.enableMC = true;
+                currentGameState.mcDraws = 5;
+                currentGameState.mcRuns = 1000;
+                currentGameState.reviewingHistoryIndex = null; // Exit review context
+                startTrainingSession('蒙地卡羅演算法', true, true);
+            });
+        }
     }
 
     if (!isWin && (isCalculator || !isResolved)) {
@@ -676,7 +819,9 @@ function renderGameScene() {
 }
 
 function renderEditScene(appContainer) {
-    const { hand } = currentGameState;
+    const { hand, isMCMode } = currentGameState;
+    const maxTiles = isMCMode ? 8 : 17;
+    const validSizes = isMCMode ? [3, 5, 8] : [5, 8, 11, 14, 17];
 
     // Render current hand (clickable to remove)
     const handHtml = hand.map((tile, index) => 
@@ -698,17 +843,19 @@ function renderEditScene(appContainer) {
 
     appContainer.innerHTML = `
         <div class="flex flex-col items-center justify-center h-full max-w-4xl mx-auto mt-4 px-2">
-            <div class="bg-white p-4 md:p-6 rounded-2xl shadow-lg border-t-8 border-blue-500 w-full text-center relative">
+            <div class="bg-white p-4 md:p-6 rounded-2xl shadow-lg border-t-8 ${isMCMode ? 'border-purple-500' : 'border-blue-500'} w-full text-center relative">
                 <h3 class="text-lg font-bold text-gray-800 mb-1">Edit Hand</h3>
                 <p class="text-xs text-gray-500 mb-4">Click tiles below to add. Click hand tiles to remove.</p>
                 
                 <!-- Current Hand -->
-                <div class="flex flex-wrap gap-1 justify-center min-h-[60px] pb-4 mb-4 border-b border-gray-100" id="edit-hand-container">
+                <div class="flex flex-wrap gap-1 justify-center min-h-[60px] pb-4 mb-2 border-b border-gray-100" id="edit-hand-container">
                     ${handHtml || '<p class="text-sm text-gray-300 italic my-auto">Hand is empty</p>'}
                 </div>
-                
-                <p class="text-sm font-bold ${hand.length > 17 ? 'text-mj-red' : 'text-blue-500'} mb-4">${hand.length} / 17 Tiles</p>
-                
+
+                <div class="flex justify-between items-center mb-4 max-w-lg mx-auto px-2">
+                    <p class="text-sm font-bold ${hand.length > maxTiles ? 'text-mj-red' : (isMCMode ? 'text-purple-500' : 'text-blue-500')}">${hand.length} / ${maxTiles} Tiles</p>
+                    <button id="edit-clear-btn" class="text-xs font-bold text-red-500 hover:text-red-700 transition ${hand.length === 0 ? 'invisible' : ''}">Clear All</button>
+                </div>                
                 <!-- Keyboard -->
                 <div class="flex flex-col gap-2 max-w-lg mx-auto bg-gray-50 p-4 rounded-xl">
                     <div class="flex justify-center gap-1">${renderSuitRow(TILE_MAP.m)}</div>
@@ -721,7 +868,7 @@ function renderEditScene(appContainer) {
                     <button id="edit-cancel-btn" class="px-6 py-2 rounded-lg text-gray-500 hover:bg-gray-100 font-medium transition">
                         Cancel
                     </button>
-                    <button id="edit-done-btn" class="px-8 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-bold shadow transition disabled:opacity-50" ${hand.length === 0 ? 'disabled' : ''}>
+                    <button id="edit-done-btn" class="px-8 py-2 rounded-lg ${isMCMode ? 'bg-purple-500 hover:bg-purple-600' : 'bg-blue-500 hover:bg-blue-600'} text-white font-bold shadow transition disabled:opacity-50" ${hand.length === 0 ? 'disabled' : ''}>
                         Analyze Hand
                     </button>
                 </div>
@@ -741,8 +888,8 @@ function renderEditScene(appContainer) {
     const allTilesFlat = [...TILE_MAP.m, ...TILE_MAP.p, ...TILE_MAP.s, ...TILE_MAP.z];
     allTilesFlat.forEach(tileCode => {
         document.getElementById(`key-${tileCode}`).addEventListener('click', () => {
-            if (currentGameState.hand.length >= 17) {
-                alert("Cannot exceed 17 tiles.");
+            if (currentGameState.hand.length >= maxTiles) {
+                alert(`Cannot exceed ${maxTiles} tiles in this mode.`);
                 return;
             }
             const countInHand = currentGameState.hand.filter(t => t === tileCode).length;
@@ -756,6 +903,15 @@ function renderEditScene(appContainer) {
         });
     });
 
+    // Clear logic
+    const clearBtn = document.getElementById('edit-clear-btn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            currentGameState.hand = [];
+            renderGameScene();
+        });
+    }
+
     // Actions
     document.getElementById('edit-cancel-btn').addEventListener('click', () => {
         currentGameState.isEditing = false;
@@ -764,7 +920,7 @@ function renderEditScene(appContainer) {
         renderGameScene();
     });
 
-    const isValidHandSize = [5, 8, 11, 14, 17].includes(currentGameState.hand.length);
+    const isValidHandSize = validSizes.includes(currentGameState.hand.length);
     
     document.getElementById('edit-done-btn').disabled = !isValidHandSize;
     if (!isValidHandSize) {
@@ -774,10 +930,11 @@ function renderEditScene(appContainer) {
     }
 
     document.getElementById('edit-done-btn').addEventListener('click', () => {
-        if (![5, 8, 11, 14, 17].includes(currentGameState.hand.length)) return;
+        if (!validSizes.includes(currentGameState.hand.length)) return;
         currentGameState.isEditing = false;
         currentGameState.selectedHandSize = currentGameState.hand.length;
         currentGameState.analysis = getDiscardAnalysis(currentGameState.hand);
+        currentGameState.mcCache = {};
         renderGameScene();
     });
 }
@@ -785,6 +942,7 @@ function renderEditScene(appContainer) {
 let currentOptimalIndex = 0; // Track which optimal move we are viewing
 
 function handleDiscard(tile, index) {
+    if (currentGameState.isMCRunning) return; // Prevent clicking while simulation is running
     if (!currentGameState.isCalculator && currentGameState.isResolved) return;
 
     // Stop live timer
@@ -914,7 +1072,7 @@ function renderHistoryScene() {
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                     </svg>
-                    Dashboard
+                    <span class="hidden sm:inline">Back</span>
                 </button>
             </div>
             
@@ -934,6 +1092,9 @@ function renderHistoryScene() {
                 currentGameState.reviewingHistoryIndex = index;
                 currentGameState.hand = [...record.hand];
                 currentGameState.selectedHandSize = record.hand.length;
+                currentGameState.mcCache = {}; // Clear old MC results
+                currentGameState.enableMC = false; // Ensure MC is off in normal calculator
+                currentGameState.isMCMode = false;
                 startTrainingSession('進張計算機', true);
             }
         });
@@ -1036,12 +1197,34 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                 <div class="flex flex-wrap gap-1 justify-center bg-white p-2 rounded-lg">
                     ${acceptanceHtml || '<p class="text-xs text-gray-400">No tiles improve this hand</p>'}
                 </div>
+                
+                ${currentGameState.enableMC && currentGameState.hand.length <= 8 ? `
+                    <div id="mc-results-container" class="mt-4 pt-4 border-t border-gray-100 flex flex-col items-center w-full min-h-[100px]">
+                        <div class="flex flex-col items-center gap-2 w-full max-w-[200px] mb-2">
+                            <div class="flex items-center gap-2 text-gray-500">
+                                <svg class="animate-spin h-4 w-4 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span id="mc-progress-text" class="text-xs font-bold uppercase tracking-wider">Running Monte Carlo... 0%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700 overflow-hidden">
+                                <div id="mc-progress-bar" class="bg-purple-500 h-1.5 rounded-full transition-all duration-150 ease-out" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-gray-400">Simulating ${currentGameState.mcRuns} runs of ${currentGameState.mcDraws} draws</p>
+                    </div>
+                ` : ''}
             </div>
         `;
         
         // Highlight active tile in Calculator
         document.querySelectorAll('.tile-container').forEach(el => el.classList.remove('scale-110', 'brightness-110', 'translate-y-[-8px]', 'z-10'));
         document.getElementById(`tile-${index}`).classList.add('scale-110', 'brightness-110', 'translate-y-[-8px]', 'z-10');
+
+        if (currentGameState.enableMC && currentGameState.hand.length <= 8) {
+            runMonteCarlo(currentGameState.hand, tile, currentGameState.mcRuns, currentGameState.mcDraws, currentGameState.includeHonors);
+        }
 
     } else {
         // Training Feedback
@@ -1148,5 +1331,224 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
         // Highlight the selected tile in Training
         document.getElementById(`tile-${index}`).classList.remove('opacity-50');
         document.getElementById(`tile-${index}`).classList.add('ring-4', isCorrect ? 'ring-mj-green' : 'ring-mj-red', 'translate-y-[-8px]', 'z-10');
+    }
+}
+
+function getMCResultsHtml(stats) {
+    const { winRate, tenpaiRate, avgDraws, runs: doneRuns, maxDraws: doneMax, topFinalHands } = stats;
+    
+    const finalHandsHtml = topFinalHands.length > 0 ? topFinalHands.map((item, idx) => {
+        let shantenBadge = '';
+        if (item.shanten === -1) {
+            shantenBadge = '<span class="bg-yellow-400 text-white text-[11px] font-black px-2 py-1 rounded shadow-sm whitespace-nowrap">糊牌</span>';
+        } else if (item.shanten === 0) {
+            shantenBadge = '<span class="bg-red-500 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">聽牌</span>';
+        } else {
+            shantenBadge = `<span class="bg-gray-400 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">${item.shanten}向聽</span>`;
+        }
+
+        return `
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between w-full p-2 bg-white rounded-lg border border-gray-100 mb-1 gap-2">
+            <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 hide-scrollbar flex-grow">
+                <span class="text-xs font-bold text-gray-400 w-4 flex-shrink-0">${idx + 1}.</span>
+                <div class="flex flex-wrap sm:flex-nowrap gap-0.5 pointer-events-none flex-shrink-0">
+                    ${item.hand.map(t => renderTile(t, { size: 'xs', extraClasses: 'shadow-sm' })).join('')}
+                </div>
+            </div>
+            <div class="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 flex-shrink-0 w-full sm:w-auto bg-gray-50 sm:bg-transparent p-1.5 sm:p-0 rounded-lg">
+                ${shantenBadge}
+                <div class="flex items-center gap-3">
+                    <div class="flex flex-col items-center">
+                        <span class="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Occur.</span>
+                        <span class="text-xs font-black text-gray-700">${item.count}</span>
+                    </div>
+                    <div class="flex flex-col items-end">
+                        <span class="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Prob.</span>
+                        <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded whitespace-nowrap">${((item.count / doneRuns) * 100).toFixed(4)}%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+    }).join('') : '<p class="text-xs text-gray-400 italic p-2">No data available</p>';
+
+    return `
+        <div class="w-full animate-fade-in-up">
+            <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center justify-between">
+                <span>Simulation Results</span>
+                <span class="text-[10px] font-normal text-gray-400 normal-case bg-gray-100 px-1.5 py-0.5 rounded">${doneRuns} runs, limit ${doneMax} draws</span>
+            </h4>
+            
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                <div class="bg-blue-50/50 rounded-lg p-2 text-center border border-blue-100">
+                    <p class="text-[10px] text-blue-600/70 font-bold mb-0.5">Win Rate</p>
+                    <p class="text-lg font-black text-blue-600">${winRate.toFixed(1)}<span class="text-xs ml-0.5">%</span></p>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-2 text-center border border-gray-100">
+                    <p class="text-[10px] text-gray-500 font-bold mb-0.5">Avg Draws to Win</p>
+                    <p class="text-lg font-black text-gray-700">${avgDraws ? avgDraws.toFixed(2) : '-'}</p>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-2 text-center border border-gray-100 col-span-2">
+                    <p class="text-[10px] text-gray-500 font-bold mb-0.5">Reached Tenpai (or Win)</p>
+                    <p class="text-lg font-black text-gray-700">${tenpaiRate.toFixed(1)}<span class="text-xs ml-0.5">%</span></p>
+                </div>
+            </div>
+
+            <div class="w-full text-left">
+                <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Top Final Hands</p>
+                <div class="flex flex-col gap-1 w-full bg-gray-50 p-1.5 rounded-xl border border-gray-100 max-h-64 overflow-y-auto">
+                    ${finalHandsHtml}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Keep track of active workers to terminate them if a new tile is clicked
+let activeMCWorkers = [];
+
+function runMonteCarlo(hand, discard, totalRuns, maxDraws, includeHonors) {
+    // Terminate existing workers
+    if (activeMCWorkers.length > 0) {
+        activeMCWorkers.forEach(w => w.terminate());
+        activeMCWorkers = [];
+    }
+    
+    // Check Cache first
+    if (currentGameState.mcCache && currentGameState.mcCache[discard]) {
+        const mcContainer = document.getElementById('mc-results-container');
+        if (mcContainer) {
+            mcContainer.innerHTML = getMCResultsHtml(currentGameState.mcCache[discard]);
+        }
+        return;
+    }
+    
+    // Set running state
+    currentGameState.isMCRunning = true;
+    const handContainer = document.getElementById('hand-container');
+    if (handContainer) {
+        handContainer.classList.add('opacity-50', 'pointer-events-none', 'cursor-not-allowed');
+    }
+
+    const mcContainer = document.getElementById('mc-results-container');
+    
+    // Determine worker pool size (cap at 4 to prevent overloading low-end devices, or fewer if runs is small)
+    const hardwareConcurrency = navigator.hardwareConcurrency || 4;
+    const numWorkers = totalRuns >= 1000 ? Math.min(hardwareConcurrency, 4) : 1;
+    
+    const runsPerWorker = Math.floor(totalRuns / numWorkers);
+    const leftoverRuns = totalRuns % numWorkers;
+
+    let completedWorkers = 0;
+    let workerProgress = new Array(numWorkers).fill(0);
+    
+    // Aggregated stats
+    let aggWinCount = 0;
+    let aggTenpaiCount = 0;
+    let aggTotalDrawsToWin = 0;
+    let aggFinalHands = {};
+
+    for (let i = 0; i < numWorkers; i++) {
+        const worker = new Worker('./src/js/engine/mcWorker.js', { type: 'module' });
+        activeMCWorkers.push(worker);
+        
+        // Calculate exact runs for this specific worker
+        const workerRuns = i === 0 ? runsPerWorker + leftoverRuns : runsPerWorker;
+        
+        worker.onmessage = function(e) {
+            if (!currentGameState.isMCRunning) return; // Ignore if cancelled
+            
+            if (e.data.progress) {
+                workerProgress[i] = e.data.percent;
+                const totalProgress = Math.floor(workerProgress.reduce((a, b) => a + b, 0) / numWorkers);
+                
+                if (mcContainer) {
+                    const progressBar = document.getElementById('mc-progress-bar');
+                    const progressText = document.getElementById('mc-progress-text');
+                    if (progressBar) progressBar.style.width = `${totalProgress}%`;
+                    if (progressText) progressText.innerText = `Running Monte Carlo... ${totalProgress}%`;
+                }
+                return;
+            }
+            
+            if (e.data.error) {
+                activeMCWorkers.forEach(w => w.terminate());
+                activeMCWorkers = [];
+                currentGameState.isMCRunning = false;
+                if (handContainer) handContainer.classList.remove('opacity-50', 'pointer-events-none', 'cursor-not-allowed');
+                if (mcContainer) mcContainer.innerHTML = `<p class="text-xs text-red-500">Error: ${e.data.error}</p>`;
+                return;
+            }
+            
+            // Worker finished successfully - Aggregate data
+            const stats = e.data.stats;
+            aggWinCount += stats.winCount;
+            // The worker sends tenpaiRate, but we need raw counts to aggregate properly
+            // Re-derive tenpaiCount from the worker's rate logic: tenpaiRate = ((tenpaiCount + winCount) / runs) * 100
+            const workerTenpaiCount = Math.round((stats.tenpaiRate / 100) * stats.runs) - stats.winCount;
+            aggTenpaiCount += workerTenpaiCount;
+            
+            // Re-derive total draws for wins
+            if (stats.avgDraws !== null) {
+                aggTotalDrawsToWin += (stats.avgDraws * stats.winCount);
+            }
+
+            // Merge final hands
+            // The worker sends an array of top 10 already reconstructed objects.
+            // For perfectly accurate aggregation, the worker should really send raw counts, but since we are just doing Top Hands, merging these counts is acceptable.
+            stats.topFinalHands.forEach(item => {
+                const stateKey = item.hand.join('');
+                if (!aggFinalHands[stateKey]) {
+                    aggFinalHands[stateKey] = { hand: item.hand, count: 0, shanten: item.shanten };
+                }
+                aggFinalHands[stateKey].count += item.count;
+            });
+
+            completedWorkers++;
+
+            if (completedWorkers === numWorkers) {
+                // All workers done - calculate final numbers
+                const finalWinRate = (aggWinCount / totalRuns) * 100;
+                const finalTenpaiRate = ((aggTenpaiCount + aggWinCount) / totalRuns) * 100;
+                const finalAvgDraws = aggWinCount > 0 ? (aggTotalDrawsToWin / aggWinCount) : null;
+
+                // Sort aggregated hands
+                const finalTopHands = Object.values(aggFinalHands)
+                    .sort((a, b) => {
+                        if (b.count !== a.count) {
+                            return b.count - a.count;
+                        }
+                        return a.shanten - b.shanten;
+                    })
+                    .slice(0, 20);
+
+                const finalStats = {
+                    winRate: finalWinRate,
+                    tenpaiRate: finalTenpaiRate,
+                    avgDraws: finalAvgDraws,
+                    winCount: aggWinCount,
+                    runs: totalRuns,
+                    maxDraws: maxDraws,
+                    topFinalHands: finalTopHands
+                };
+
+                // Cleanup state
+                activeMCWorkers = [];
+                currentGameState.isMCRunning = false;
+                if (handContainer) {
+                    handContainer.classList.remove('opacity-50', 'pointer-events-none', 'cursor-not-allowed');
+                }
+
+                if (!currentGameState.mcCache) currentGameState.mcCache = {};
+                currentGameState.mcCache[discard] = finalStats;
+                
+                if (mcContainer) {
+                    mcContainer.innerHTML = getMCResultsHtml(finalStats);
+                }
+            }
+        };
+        
+        // Start worker
+        worker.postMessage({ hand, discard, runs: workerRuns, maxDraws, includeHonors });
     }
 }

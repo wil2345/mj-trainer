@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.1.5)
+# Taiwan Mahjong Trainer - Project Specification (v1.2.0)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
@@ -45,11 +45,32 @@ Unlike full game simulators, this app focuses heavily on **efficiency training**
     *   If correct (but multiple optimal moves exist), it shows a slider of the *other* optimal choices.
 *   **Share Functionality:** Generates a custom URL with the exact hand state (e.g., `?hand=123m456p`) and copies it to the clipboard.
 
-### D. Calculator Mode (進張計算機)
+### D. Monte Carlo Simulation Mode (蒙地卡羅演算法)
+*   **Objective:** A deep-dive analytical mode to simulate thousands of future draws based on a specific discard. It evaluates the absolute best long-term outcome rather than just the immediate 1-step acceptance.
+*   **Mechanics:**
+    *   Limited to smaller sub-hands (**3, 5, or 8 tiles**) to manage computational complexity.
+    *   Simulates drawing and discarding repeatedly until a Win (-1 Shanten) or the max draw limit is reached.
+    *   The bot uses a "greedy" approach, always calculating and discarding the tile that offers the mathematically optimal immediate acceptance at every step of the simulation.
+*   **Settings Modal:**
+    *   **Hand Sizes:** 3, 5, and 8 tiles.
+    *   **Max Draws:** The limit of turns simulated per run (3, 5, 7, or 10 draws).
+    *   **Iterations:** The number of times the simulation is run (100, 1,000, 5,000, or 10,000 runs).
+*   **Performance (Multi-Threading):** 
+    *   Utilizes a **Web Worker Pool** (`mcWorker.js`) to offload heavy DP calculations from the main thread.
+    *   Spawns multiple workers dynamically based on the device's CPU cores (`navigator.hardwareConcurrency`) to execute runs in parallel, drastically reducing calculation time.
+    *   Employs an **In-Worker State Cache** to memorize optimal moves for previously seen hand configurations during a simulation, providing a massive speed boost.
+*   **Results Display:**
+    *   **Win Rate:** Percentage of runs that reached a winning hand.
+    *   **Reached Tenpai:** Percentage of runs that successfully built a ready hand (or won).
+    *   **Average Draws:** Average turns required to win.
+    *   **Top 20 Final Hands:** A detailed breakdown of the exact shapes the hand ended in, sorted by occurrence count and resulting Shanten, complete with exact probabilities and frequency counts.
+
+### E. Calculator Mode (進張計算機)
 *   **Objective:** A sandbox mode for testing custom hands.
 *   **Functionality:** 
     *   Users can freely click tiles in generated hands to see their exact discard stats without affecting their dashboard Accuracy.
-    *   **Edit Hand:** A visual tile keyboard allows users to manually construct hands (up to 17 tiles) to analyze specific real-world scenarios.
+    *   **Edit Hand:** A visual tile keyboard allows users to manually construct hands (up to 17 tiles) to analyze specific real-world scenarios. Includes a "Clear All" utility.
+    *   **To Monte Carlo:** If a constructed hand is 8 tiles or fewer, a quick-action button allows seamless transition of the hand state into the Monte Carlo Simulation mode for deeper analysis.
     *   Shared URLs automatically open in this mode to prevent skewing the recipient's training stats.
 
 ## 4. Application Architecture & Folder Structure
@@ -74,7 +95,8 @@ Unlike full game simulators, this app focuses heavily on **efficiency training**
     │   └── Tile.js       # UI Component logic: Renders tiles using HTML/CSS and Unicode chars
     └── engine/
         ├── handGenerator.js # Logic to generate random, valid hands based on settings
-        └── shanten.js       # The Core Engine: DP Algorithm for Shanten calculation
+        ├── shanten.js       # The Core Engine: DP Algorithm for Shanten calculation
+        └── mcWorker.js      # Web Worker for off-thread Monte Carlo simulations
 ```
 
 ## 5. Mahjong Engine Deep Dive (`shanten.js`)
