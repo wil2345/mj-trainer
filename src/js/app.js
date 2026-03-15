@@ -28,7 +28,8 @@ let currentGameState = {
     mcCache: {},
     aiDifficulty: 'expert', // 'expert', 'beginner', 'random'
     aiStyle: 'balanced',   // 'balanced', 'defensive'
-    showAiTenpai: false
+    showAiTenpai: false,
+    aiSpeedMode: false
 };
 
 let liveTimerInterval = null;
@@ -185,7 +186,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.5</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.9</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -305,7 +306,7 @@ function initApp() {
     });
 
     document.getElementById('btn-vs').addEventListener('click', () => {
-        startVsMode();
+        showSettingsModal('AI對戰練習', false, false);
     });
 }
 
@@ -330,6 +331,7 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
     let tempAiDifficulty = currentGameState.aiDifficulty || 'expert';
     let tempAiStyle = currentGameState.aiStyle || 'aggressive';
     let tempShowAiTenpai = currentGameState.showAiTenpai || false;
+    let tempAiSpeedMode = currentGameState.aiSpeedMode || false;
 
     const activeColorClass = isMCMode ? 'bg-purple-500' : (isCalculator ? 'bg-blue-500' : (isVsMode ? 'bg-orange-500' : 'bg-mj-green'));
     const sizes = [5, 8, 11, 14, 17];
@@ -388,10 +390,16 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
                                     <option value="defensive" ${tempAiStyle === 'defensive' ? 'selected' : ''}>保守 (Defensive)</option>
                                 </select>
                             </div>
-                            <div id="modal-ai-tenpai-toggle-wrapper" class="flex items-center justify-between p-2 border border-gray-100 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer select-none mt-1">
-                                <span class="text-xs text-gray-700 dark:text-gray-300 font-medium">Show AI Tenpai (聽牌) Indicator</span>
-                                <div class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${tempShowAiTenpai ? activeColorClass : 'bg-gray-200 dark:bg-gray-600'}">
-                                    <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${tempShowAiTenpai ? 'translate-x-5' : 'translate-x-1'}"></span>
+                            <div id="modal-ai-tenpai-toggle-wrapper" class="flex items-center justify-between p-3 border border-gray-100 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer select-none mt-1">
+                                <span class="text-sm text-gray-700 dark:text-gray-300 font-medium">顯示AI叫糊狀態</span>
+                                <div class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${tempShowAiTenpai ? activeColorClass : 'bg-gray-200 dark:bg-gray-600'}">
+                                    <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${tempShowAiTenpai ? 'translate-x-6' : 'translate-x-1'}"></span>
+                                </div>
+                            </div>
+                            <div id="modal-ai-speed-toggle-wrapper" class="flex items-center justify-between p-3 border border-gray-100 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer select-none mt-1">
+                                <span class="text-sm text-gray-700 dark:text-gray-300 font-medium">極速AI模式</span>
+                                <div class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${tempAiSpeedMode ? activeColorClass : 'bg-gray-200 dark:bg-gray-600'}">
+                                    <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${tempAiSpeedMode ? 'translate-x-6' : 'translate-x-1'}"></span>
                                 </div>
                             </div>
                         </div>
@@ -544,6 +552,14 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
         });
     }
 
+    const aiSpeedWrapper = document.getElementById('modal-ai-speed-toggle-wrapper');
+    if (aiSpeedWrapper) {
+        aiSpeedWrapper.addEventListener('click', () => {
+            tempAiSpeedMode = !tempAiSpeedMode;
+            updateToggleUI('modal-ai-speed-toggle-wrapper', tempAiSpeedMode);
+        });
+    }
+
     const mcPolicySelect = document.getElementById('mc-policy-select');
 
     const mcDrawsSelect = document.getElementById('mc-draws-select');
@@ -554,6 +570,7 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
             currentGameState.aiDifficulty = tempAiDifficulty;
             currentGameState.aiStyle = tempAiStyle;
             currentGameState.showAiTenpai = tempShowAiTenpai;
+            currentGameState.aiSpeedMode = tempAiSpeedMode;
             modalEl.innerHTML = '';
             if (isUpdate) {
                 renderVsArena(); // Refresh labels
@@ -1771,13 +1788,6 @@ function startVsMode(providedSeed = null) {
     vsGameState.trajectory.push({ actor: 'player', action: 'draw', tile: firstTile });
 
     renderVsArena();
-    
-    // Initial check for self-draw win (extremely rare but possible)
-    if (isWinningHand(vsGameState.player.closed, vsGameState.player.open.length)) {
-        vsGameState.isGameOver = true;
-        vsGameState.winner = 'player';
-        renderVsArena();
-    }
 }
 
 function renderVsArena() {
@@ -1802,11 +1812,14 @@ function renderVsArena() {
             </div>
         `;
         }).join('');
-    const isAiTenpai = calculateShanten(ai.closed, ai.open.length) === 0;
+    const aiShanten = calculateShanten(ai.closed, ai.open.length);
     
-    // Check for player's self-actions (Ankan/Kakan) during their turn
+    // Check for player's self-actions (Ankan/Kakan/Tsumo) during their turn
     let turnActions = [];
     if (currentTurn === 'player' && !isGameOver && !pendingAction && player.closed.length % 3 === 2) {
+        if (isWinningHand(player.closed, player.open.length)) {
+            turnActions.push({ type: 'tsumo', label: '自摸' });
+        }
         const kanOpts = getClosedKanOptions(player.closed, player.open);
         if (kanOpts.length > 0) {
             turnActions.push({ type: 'kan_self', label: '槓', options: kanOpts });
@@ -1870,7 +1883,11 @@ function renderVsArena() {
                 <div class="flex justify-between items-center mb-2">
                     <div class="flex items-center gap-2">
                         <div class="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-[10px] font-bold">AI</div>
-                        ${currentGameState.showAiTenpai && isAiTenpai ? '<span class="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded animate-pulse shadow-sm">聽牌</span>' : ''}
+                        ${(currentGameState.showAiTenpai && !isGameOver) ? (
+                            aiShanten === 0 
+                            ? '<span class="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded animate-pulse shadow-sm">聽牌</span>' 
+                            : `<span class="bg-gray-400 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm">${aiShanten}向聽</span>`
+                        ) : ''}
                     </div>
                     
                     <div class="flex items-center gap-2">
@@ -1900,7 +1917,7 @@ function renderVsArena() {
                 <div id="vs-action-buttons" class="flex gap-2">
                     ${pendingAction ? `
                         ${pendingAction.actions.map(action => `
-                            <button class="vs-action-btn bg-mj-green hover:bg-emerald-600 text-white font-black px-5 py-2 rounded-lg shadow-md transition active:scale-95" data-type="${action.type}">
+                            <button class="vs-action-btn ${action.type === 'ron' ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-mj-green hover:bg-emerald-600'} text-white font-black px-5 py-2 rounded-lg shadow-md transition active:scale-95" data-type="${action.type}">
                                 ${action.label}
                             </button>
                         `).join('')}
@@ -1911,7 +1928,7 @@ function renderVsArena() {
                     
                     ${turnActions.length > 0 ? `
                         ${turnActions.map(action => `
-                            <button class="vs-turn-action-btn bg-orange-500 hover:bg-orange-600 text-white font-black px-5 py-2 rounded-lg shadow-md transition active:scale-95" data-type="${action.type}">
+                            <button class="vs-turn-action-btn ${action.type === 'tsumo' ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-mj-green hover:bg-emerald-600'} text-white font-black px-5 py-2 rounded-lg shadow-md transition active:scale-95" data-type="${action.type}">
                                 ${action.label}
                             </button>
                         `).join('')}
@@ -2019,6 +2036,8 @@ function renderVsArena() {
                 } else if (kanOpts.length > 1) {
                     showKanModal(kanOpts);
                 }
+            } else if (type === 'tsumo') {
+                handleVsAction(type);
             }
         });
     });
@@ -2038,11 +2057,17 @@ function renderVsArena() {
 
 function handleVsAction(type) {
     const { pendingAction } = vsGameState;
-    const tile = pendingAction.tile;
+    const tile = pendingAction ? pendingAction.tile : null;
 
     saveVsSnapshot();
 
-    if (type === 'ron') {
+    if (type === 'tsumo') {
+        vsGameState.isGameOver = true;
+        vsGameState.winner = 'player';
+        vsGameState.trajectory.push({ actor: 'player', action: 'tsumo' });
+        vsGameState.pendingAction = null;
+        renderVsArena();
+    } else if (type === 'ron') {
         vsGameState.isGameOver = true;
         vsGameState.winner = 'player';
         vsGameState.player.closed.push(tile);
@@ -2155,7 +2180,9 @@ function vsPlayerDiscard(index) {
     }
 
     // Trigger AI Turn
-    vsAiTurn();
+    setTimeout(() => {
+        vsAiTurn();
+    }, currentGameState.aiSpeedMode ? 0 : 1000);
 }
 
 function checkAiInterrupt(tile) {
@@ -2165,31 +2192,55 @@ function checkAiInterrupt(tile) {
         vsGameState.winner = 'ai';
         vsGameState.ai.closed.push(tile);
         vsGameState.trajectory.push({ actor: 'ai', action: 'ron', tile: tile });
-        showAiActionBubble('食');
+        showAiActionBubble('糊');
         renderVsArena();
         return true;
-    }
-
-    if (currentGameState.aiStyle === 'defensive') {
-        return false; // Defensive style NEVER calls Chi or Pon
     }
 
     // AI logic for Pon/Chi/Kan
     const currentAnalysis = getDiscardAnalysis(vsGameState.ai.closed, vsGameState.ai.open.length);
     const currentShanten = currentAnalysis.length > 0 ? currentAnalysis[0].shanten : calculateShanten(vsGameState.ai.closed, vsGameState.ai.open.length);
+    const currentAcceptance = currentAnalysis.length > 0 ? currentAnalysis[0].acceptance : 0;
+
+    // Gather all tiles explicitly discarded by the player (river + tiles the AI stole)
+    const playerDiscards = [...vsGameState.player.river];
+    vsGameState.ai.open.forEach(meld => {
+        if (Array.isArray(meld)) {
+            // Arrays represent open melds (Chi/Pon/Daiminkan/Kakan).
+            // For Chi, we format it as [left, stolen, right]. For others, all tiles are identical.
+            // So index 1 is ALWAYS the tile stolen from the player!
+            playerDiscards.push(meld[1]);
+        }
+    });
 
     // Helper to evaluate if a call is worth it based on style
     const evaluateCall = (tempHand, nextOpenCount) => {
-        const nextAnalysis = getDiscardAnalysis(tempHand, nextOpenCount);
+        // Filter out the stolen tile from the hypothetical analysis since it will be forbidden
+        const nextAnalysisRaw = getDiscardAnalysis(tempHand, nextOpenCount);
+        const nextAnalysis = nextAnalysisRaw.filter(a => a.discard !== tile);
+        
         if (nextAnalysis.length === 0) return false;
         
         const nextShanten = nextAnalysis[0].shanten;
+        const nextAcceptance = nextAnalysis[0].acceptance;
 
-        if (currentGameState.aiStyle === 'aggressive') {
-            return nextShanten <= currentShanten;
-        } else {
-            return nextShanten < currentShanten;
+        // A call MUST either be faster (lower shanten) OR result in more acceptance (better wait)
+        const isImprovement = (nextShanten < currentShanten) || (nextShanten === currentShanten && nextAcceptance > currentAcceptance);
+        
+        if (!isImprovement) return false;
+
+        if (currentGameState.aiStyle === 'defensive') {
+            // Defensive AI ONLY makes a call if it can discard a 100% safe tile (already in player's river or stolen from player)
+            // It will not make a call if it forces it to discard an unseen/dangerous tile, even if the call lowers Shanten.
+            const hasSafeDiscard = nextAnalysis.some(a => 
+                a.shanten === nextShanten && 
+                playerDiscards.includes(a.discard)
+            );
+            return hasSafeDiscard;
         }
+        
+        // Aggressive & Balanced now both take any move that is a strict improvement
+        return true;
     };
 
     // 2. Check AI Kan (Open)
@@ -2202,7 +2253,11 @@ function checkAiInterrupt(tile) {
             vsGameState.trajectory.push({ actor: 'ai', action: 'kan', tile: tile });
             vsGameState.latestDiscard = null;
             vsGameState.currentTurn = 'ai';
-            vsDrawReplacement('ai');
+            showAiActionBubble('槓');
+            renderVsArena();
+            setTimeout(() => {
+                vsDrawReplacement('ai');
+            }, currentGameState.aiSpeedMode ? 0 : 1000);
             return true;
         }
     }
@@ -2224,7 +2279,9 @@ function checkAiInterrupt(tile) {
             vsGameState.forbiddenDiscard = tile; // Rule: Cannot discard stolen tile same turn
             showAiActionBubble('碰');
             renderVsArena(); // Show the new meld immediately
-            vsAiDiscard(); // AI must discard after stealing
+            setTimeout(() => {
+                vsAiDiscard();
+            }, currentGameState.aiSpeedMode ? 0 : 1000);
             return true;
         }
     }
@@ -2260,7 +2317,7 @@ function checkPlayerInterrupt(tile) {
 
     // 1. Check Ron
     if (isWinningHand([...vsGameState.player.closed, tile], vsGameState.player.open.length)) {
-        actions.push({ type: 'ron', label: '食', tile });
+        actions.push({ type: 'ron', label: '糊', tile });
     }
 
     // 2. Check Kan (Open)
@@ -2324,6 +2381,26 @@ async function vsAiDiscard() {
     // reset forbidden discard after it has been used to filter this turn
     vsGameState.forbiddenDiscard = null;
 
+    if (currentGameState.aiStyle === 'defensive') {
+        // Gather all tiles explicitly discarded by the player (river + tiles the AI stole)
+        const playerDiscards = [...vsGameState.player.river];
+        vsGameState.ai.open.forEach(meld => {
+            if (Array.isArray(meld)) {
+                playerDiscards.push(meld[1]); // Index 1 is always the stolen tile
+            }
+        });
+
+        // Defensive AI prioritizes safe discards within the same Shanten level
+        analysis.sort((a, b) => {
+            if (a.shanten !== b.shanten) return a.shanten - b.shanten;
+            const aSafe = playerDiscards.includes(a.discard);
+            const bSafe = playerDiscards.includes(b.discard);
+            if (aSafe && !bSafe) return -1;
+            if (!aSafe && bSafe) return 1;
+            return b.acceptance - a.acceptance;
+        });
+    }
+
     if (analysis.length === 0 && allowedClosedHand.length === 0) {
         // Fallback in case every single tile is somehow forbidden (should be impossible in Mahjong)
         const fallbackMove = vsGameState.ai.closed[0];
@@ -2337,31 +2414,48 @@ async function vsAiDiscard() {
     if (currentGameState.aiDifficulty === 'expert' && (handSizeAfterDiscard === 8 || handSizeAfterDiscard <= 5)) {
         // --- Expert internal Monte Carlo logic ---
         const iterations = handSizeAfterDiscard === 8 ? 100 : 1000;
-        const maxDraws = 3;
+        const maxDraws = 5;
         
         // Collect all known/dead tiles on the board
         let deadTiles = [];
         deadTiles.push(...vsGameState.player.river);
         deadTiles.push(...vsGameState.ai.river);
         
-        // Helper to extract tiles from open melds (which can be arrays or objects with .tiles)
-        const extractOpenTiles = (openMelds) => {
+        // Helper to extract tiles from open melds, respecting Ankan hidden state
+        const extractOpenTiles = (openMelds, isAi) => {
             let tiles = [];
             openMelds.forEach(meld => {
                 if (Array.isArray(meld)) {
+                    // Regular Chi/Pon/Daiminkan
                     tiles.push(...meld);
                 } else if (meld.tiles) {
-                    tiles.push(...meld.tiles);
+                    // It's an Ankan. AI only knows the tiles if it's the AI's own Ankan!
+                    if (isAi || !meld.isClosed) {
+                        tiles.push(...meld.tiles);
+                    }
                 }
             });
             return tiles;
         };
         
-        deadTiles.push(...extractOpenTiles(vsGameState.player.open));
-        deadTiles.push(...extractOpenTiles(vsGameState.ai.open));
+        deadTiles.push(...extractOpenTiles(vsGameState.player.open, false));
+        deadTiles.push(...extractOpenTiles(vsGameState.ai.open, true));
 
-        // Consider only top 3 candidates from filtered analysis
-        const candidates = analysis.slice(0, Math.min(3, analysis.length));
+        // Filter candidates: ONLY evaluate moves that maintain the absolute best possible Shanten for this hand state.
+        // We do not want the MC engine stepping backwards in Shanten (e.g., from 1 Shanten to 2 Shanten).
+        const bestPossibleShanten = analysis[0].shanten;
+        let topTierCandidates = analysis.filter(a => a.shanten === bestPossibleShanten);
+
+        if (currentGameState.aiStyle === 'defensive') {
+            // If defensive, the MC engine should ONLY simulate safe tiles if they exist at this Shanten level.
+            const safeCandidates = topTierCandidates.filter(a => vsGameState.player.river.includes(a.discard));
+            if (safeCandidates.length > 0) {
+                topTierCandidates = safeCandidates;
+            }
+        }
+
+        // Consider only top 3 candidates from this top tier
+        const candidates = topTierCandidates.slice(0, Math.min(3, topTierCandidates.length));
         
         if (candidates.length > 1) {
             // Evaluate each candidate in parallel
@@ -2425,10 +2519,7 @@ function vsPlayerDraw() {
     vsGameState.player.closed.push(playerTile);
     vsGameState.trajectory.push({ actor: 'player', action: 'draw', tile: playerTile });
 
-    if (isWinningHand(vsGameState.player.closed, vsGameState.player.open.length)) {
-        vsGameState.isGameOver = true;
-        vsGameState.winner = 'player';
-    }
+    // Note: Winning is now handled via turnActions in renderVsArena
     renderVsArena();
 }
 
@@ -2449,6 +2540,8 @@ function vsAiTurn() {
         return;
     }
     
+    renderVsArena(); // Show the drawn tile before a possible pause
+
     // 3. Check for AI Ankan/Kakan
     if (currentGameState.aiStyle !== 'defensive') {
         const kanOpts = getClosedKanOptions(vsGameState.ai.closed, vsGameState.ai.open);
@@ -2478,7 +2571,11 @@ function vsAiTurn() {
                         vsGameState.ai.closed = sortHand(tempHand);
                     }
                     vsGameState.trajectory.push({ actor: 'ai', action: opt.type, tile: opt.tile });
-                    vsDrawReplacement('ai');
+                    showAiActionBubble(opt.type === 'ankan' ? '暗槓' : '加槓');
+                    renderVsArena();
+                    setTimeout(() => {
+                        vsDrawReplacement('ai');
+                    }, currentGameState.aiSpeedMode ? 0 : 1000);
                     return; // Replacement draw logic will handle next steps
                 }
             }
@@ -2486,7 +2583,9 @@ function vsAiTurn() {
     }
 
     // 4. AI Discards
-    vsAiDiscard();
+    setTimeout(() => {
+        vsAiDiscard();
+    }, currentGameState.aiSpeedMode ? 0 : 1000);
 }
 
 
@@ -2609,15 +2708,20 @@ function vsDrawReplacement(actor) {
     
     if (actor === 'ai') {
         showAiActionBubble('槓');
-    }
-    
-    if (isWinningHand(vsGameState[actor].closed, vsGameState[actor].open.length)) {
-        vsGameState.isGameOver = true;
-        vsGameState.winner = actor;
-        showAiActionBubble('自摸');
+        if (isWinningHand(vsGameState.ai.closed, vsGameState.ai.open.length)) {
+            vsGameState.isGameOver = true;
+            vsGameState.winner = 'ai';
+            showAiActionBubble('自摸');
+        }
     }
     
     renderVsArena();
+
+    if (actor === 'ai' && !vsGameState.isGameOver) {
+        setTimeout(() => {
+            vsAiDiscard();
+        }, currentGameState.aiSpeedMode ? 0 : 1000);
+    }
 }
 
 function showKanModal(options) {

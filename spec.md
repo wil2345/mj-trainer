@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.3.5)
+# Taiwan Mahjong Trainer - Project Specification (v1.3.9)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
@@ -51,17 +51,18 @@ Beyond isolated efficiency training, the app features a full 1-on-1 AI Arena to 
     *   **上 (Chi)**: Forming sequences from opponent discards.
     *   **碰 (Pon)**: Forming triplets from opponent discards.
     *   **槓 (Kan)**: Open Kan, Ankan (Closed), and Kakan (Added). 
-    *   **食 (Ron) / 自摸 (Tsumo)**: Winning mechanics with full Shanten validation.
+    *   **糊 (Ron) / 自摸 (Tsumo)**: Winning mechanics with full Shanten validation. Both actions utilize golden UI highlights.
 *   **AI Settings:**
     *   **Difficulty (難度):** Expert (Perfect efficiency), Beginner (Suboptimal moves), Random (Random discards).
-    *   **Play Style (打法風格):** Aggressive (Calls to maintain Shanten), Balanced (Calls only to improve Shanten), Defensive (Never calls).
-    *   **Show AI Tenpai Indicator:** Toggles a red "聽牌" badge when the AI is one tile from winning.
+    *   **Play Style (打法風格):** Aggressive (Calls to improve hand), Balanced (Calls to improve hand), Defensive (Calls only if discard is 100% safe).
+    *   **Show AI State (顯示AI叫糊狀態):** Toggles dynamic badges showing the AI's exact Shanten count (X向聽) or a pulsing red "聽牌" badge when waiting. Hides automatically upon game over.
+    *   **AI Speed Mode (極速AI模式):** Toggles between a 1-second "human-like" delay for AI actions (default) or instant execution (0ms) for speed training.
 *   **Advanced Features:**
-    *   **Expert MC Logic:** The Expert AI uses internal Monte Carlo simulations for endgame hands (8 or fewer tiles) to evaluate the best long-term discard.
-    *   **Zero-Delay Execution:** AI performs evaluations and actions instantly, providing an immediate and continuous feedback loop for fast-paced training.
+    *   **Strict Improvement Rule:** The AI will never make a "sideways" call (like kuikae) that locks its hand without mathematical benefit. A call MUST lower Shanten OR increase total tile acceptance.
+    *   **Defensive Safety Logic:** When set to Defensive, the AI will prioritize discarding tiles that exist in the player's river or have been explicitly stolen from the player, ensuring it does not deal into a Ron.
+    *   **Expert MC Logic:** The Expert AI uses internal Monte Carlo simulations for endgame hands (8 or fewer tiles, running up to 5 draws deep) to evaluate the best long-term discard, rigorously avoiding backward Shanten jumps.
     *   **Undo (悔棋):** Step back to previous moves to correct mistakes or test different strategies.
-    *   **Seeded Matches:** Every game has a unique numeric seed, allowing matches to be perfectly reproduced and shared.
-    *   **Feedback:** Phone-style notifications for all AI actions and high-visibility highlighting for the latest discarded tiles.
+    *   **Seeded Matches:** Every game has a unique numeric seed (with a one-click copy button), allowing matches to be perfectly reproduced and shared.
     *   **Accurate Melds:** Open melds correctly reflect standard rules by displaying the "stolen" tile visually in the center of the set (e.g., placing the called `4s` between a `5s` and `6s` in a Chi).
     *   **Realism:** AI Ankan tiles remain hidden until game-over or manual "Show Hand" toggle.
 
@@ -136,7 +137,7 @@ Tiles are represented as 2-character strings: `[value][suit]`.
 The application uses pure HTML/CSS and standard Unicode Mahjong characters (e.g., `🀇`, `🀀`) inside `src/js/components/Tile.js` to render the tiles. This approach bypasses cross-platform SVG baseline alignment bugs and ensures perfect vertical centering across all mobile operating systems.
 
 ### Shanten Calculation (Dynamic Programming)
-*   **Shanten (向聴):** The minimum number of tile swaps required to reach a winning state (Tenpai is 0 Shanten, Win is -1 Shanten).
+*   **Shanten (向聽):** The minimum number of tile swaps required to reach a winning state (Tenpai is 0 Shanten, Win is -1 Shanten).
 *   **The DP Algorithm:** `shanten.js` uses a highly optimized Dynamic Programming (DP) approach with memoization. It converts a hand into frequency arrays and recursively attempts to extract valid structures:
     1.  **Melds (面子):** Sequences (Chows) or Triplets (Pungs).
     2.  **Pairs (雀頭):** Two identical tiles.
