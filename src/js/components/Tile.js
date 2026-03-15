@@ -51,7 +51,7 @@ export const renderTile = (tileCode, { size = 'md', extraClasses = '', id = '', 
         return `
             <div 
                 ${id ? `id="${id}"` : ''}
-                class="tile-container relative inline-flex flex-col transition-all ${sizeClasses[size]} ${extraClasses} select-none"
+                class="tile-container relative inline-flex flex-col transition-all ${sizeClasses[size]} ${extraClasses} select-none flex-shrink-0"
             >
                 <div class="absolute inset-0 bg-gray-300 rounded-md mt-[10%]"></div>
                 <div class="absolute inset-0 bottom-[6%] bg-yellow-500 border-[0.5px] border-yellow-600 rounded-md overflow-hidden flex items-center justify-center">
@@ -67,7 +67,7 @@ export const renderTile = (tileCode, { size = 'md', extraClasses = '', id = '', 
         <div 
             ${id ? `id="${id}"` : ''}
             data-tile="${tileCode}"
-            class="tile-container relative inline-flex flex-col cursor-pointer transition-all hover:-translate-y-1 active:scale-95 ${sizeClasses[size]} ${extraClasses} select-none"
+            class="tile-container relative inline-flex flex-col cursor-pointer transition-all hover:-translate-y-1 active:scale-95 ${sizeClasses[size]} ${extraClasses} select-none flex-shrink-0"
         >
             <!-- Shadow Layer (Depth) -->
             <div class="absolute inset-0 bg-gray-300 rounded-md mt-[10%]"></div>

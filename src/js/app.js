@@ -185,7 +185,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.0</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.1</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -1797,7 +1797,7 @@ function renderVsArena() {
         // Reveal if it's not Ankan, or if it IS Ankan but showAiHand or isGameOver is true
         const shouldShow = !isAnkan || !isAi || showAiHand || isGameOver;
         return `
-            <div class="flex border border-gray-200 rounded p-0.5 bg-gray-50">
+            <div class="flex border border-gray-200 rounded p-0.5 bg-gray-50 sm:w-auto w-[calc(50%-0.25rem)] justify-center gap-0.5">
                 ${tiles.map(t => renderTile(t, { size: 'xs', faceDown: !shouldShow })).join('')}
             </div>
         `;
@@ -1835,6 +1835,9 @@ function renderVsArena() {
                     AI對戰練習
                 </h2>
                 <div class="flex items-center gap-2">
+                    <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-2 py-1.5 rounded-lg border border-gray-100">
+                        Wall: ${wall.length}
+                    </div>
                     <button id="vs-rollback-btn" class="text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 border border-blue-100 flex items-center gap-1 px-2 py-1.5 rounded transition disabled:opacity-30 disabled:cursor-not-allowed" title="Rollback Move (悔棋)" ${vsGameState.historyStack.length === 0 ? 'disabled' : ''}>
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -1871,17 +1874,17 @@ function renderVsArena() {
                             <div class="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-[10px] font-bold">AI</div>
                             ${currentGameState.showAiTenpai && isAiTenpai ? '<span class="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded animate-pulse shadow-sm">聽牌</span>' : ''}
                         </div>
-                        <div class="flex gap-1 min-h-[24px]" id="ai-open-melds">
-                            ${renderOpenMelds(ai.open)}
+                        <div class="flex flex-wrap gap-1 min-h-[24px] max-w-full" id="ai-open-melds">
+                            ${renderOpenMelds(ai.open, true)}
                         </div>
                     </div>
                     
-                    <div class="flex flex-col items-end gap-1.5">
+                    <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
                         <div class="flex items-center gap-2">
-                            <button id="toggle-ai-hand-btn" class="text-[10px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition">
+                            <button id="toggle-ai-hand-btn" class="text-[10px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition whitespace-nowrap">
                                 ${showAiHand ? 'Hide Hand' : 'Show Hand'}
                             </button>
-                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">${ai.closed.length} Tiles</span>
+                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">${ai.closed.length} Tiles</span>
                         </div>
                     </div>
                 </div>
@@ -1897,10 +1900,6 @@ function renderVsArena() {
 
             <!-- Action Center -->
             <div class="w-full flex flex-col items-center justify-center py-4 relative min-h-[60px]">
-                <div class="absolute left-0 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white px-2">
-                    Wall: ${wall.length}
-                </div>
-
                 <div id="vs-action-buttons" class="flex gap-2">
                     ${pendingAction ? `
                         ${pendingAction.actions.map(action => `
@@ -1943,11 +1942,11 @@ function renderVsArena() {
 
             <!-- Player Area -->
             <div class="w-full bg-white rounded-xl shadow-md border-t-4 border-orange-500 p-3">
-                <div class="flex justify-between items-center mb-3">
-                    <div class="flex gap-1" id="player-open-melds">
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex flex-wrap gap-1 max-w-[70%]" id="player-open-melds">
                         ${renderOpenMelds(player.open)}
                     </div>
-                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your Hand</span>
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex-shrink-0">Your Hand</span>
                 </div>
                 <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-center" id="vs-hand-container">
                     ${player.closed.map((t, i) => renderTile(t, { 
@@ -2009,6 +2008,21 @@ function renderVsArena() {
         });
     }
 
+    // --- ADDED: Turn Actions (Ankan/Kakan) ---
+    document.querySelectorAll('.vs-turn-action-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const type = e.currentTarget.dataset.type;
+            if (type === 'kan_self') {
+                const kanOpts = getClosedKanOptions(player.closed, player.open);
+                if (kanOpts.length === 1) {
+                    executeKanSelf(kanOpts[0]);
+                } else if (kanOpts.length > 1) {
+                    showKanModal(kanOpts);
+                }
+            }
+        });
+    });
+
     if (currentTurn === 'player' && !isGameOver && !pendingAction) {
         player.closed.forEach((t, i) => {
             const el = document.getElementById(`vs-tile-${i}`);
@@ -2043,6 +2057,7 @@ function handleVsAction(type) {
         vsGameState.trajectory.push({ actor: 'player', action: 'pon', tile });
         vsGameState.pendingAction = null;
         vsGameState.currentTurn = 'player';
+        vsGameState.forbiddenDiscard = tile; // Cannot discard the tile just Poned
         renderVsArena();
         // Player must discard now
     } else if (type === 'chi') {
@@ -2052,6 +2067,14 @@ function handleVsAction(type) {
         } else {
             showChiModal(action.options, tile);
         }
+    } else if (type === 'kan') {
+        // --- ADDED: Open Kan (Daiminkan) ---
+        vsGameState.player.closed = vsGameState.player.closed.filter(t => t !== tile);
+        vsGameState.player.open.push([tile, tile, tile, tile]);
+        vsGameState.trajectory.push({ actor: 'player', action: 'kan', tile });
+        vsGameState.pendingAction = null;
+        vsGameState.currentTurn = 'player';
+        vsDrawReplacement('player');
     }
 }
 
@@ -2403,8 +2426,44 @@ function vsAiTurn() {
         renderVsArena();
         return;
     }
+    
+    // 3. Check for AI Ankan/Kakan
+    if (currentGameState.aiStyle !== 'defensive') {
+        const kanOpts = getClosedKanOptions(vsGameState.ai.closed, vsGameState.ai.open);
+        if (kanOpts.length > 0) {
+            // Simple heuristic: always Kan if it doesn't increase Shanten
+            const currentShanten = calculateShanten(vsGameState.ai.closed, vsGameState.ai.open.length);
+            for (let opt of kanOpts) {
+                let tempHand;
+                if (opt.type === 'ankan') {
+                    tempHand = vsGameState.ai.closed.filter(t => t !== opt.tile);
+                } else {
+                    tempHand = [...vsGameState.ai.closed];
+                    tempHand.splice(tempHand.indexOf(opt.tile), 1);
+                }
+                
+                if (calculateShanten(tempHand, vsGameState.ai.open.length + 1) <= currentShanten) {
+                    if (opt.type === 'ankan') {
+                        vsGameState.ai.closed = sortHand(tempHand);
+                        vsGameState.ai.open.push({ tiles: [opt.tile, opt.tile, opt.tile, opt.tile], isClosed: true });
+                    } else {
+                        const meldIdx = vsGameState.ai.open.findIndex(m => !Array.isArray(m) ? (m.tiles[0] === opt.tile) : (m[0] === opt.tile && m.length === 3));
+                        if (Array.isArray(vsGameState.ai.open[meldIdx])) {
+                            vsGameState.ai.open[meldIdx].push(opt.tile);
+                        } else {
+                            vsGameState.ai.open[meldIdx].tiles.push(opt.tile);
+                        }
+                        vsGameState.ai.closed = sortHand(tempHand);
+                    }
+                    vsGameState.trajectory.push({ actor: 'ai', action: opt.type, tile: opt.tile });
+                    vsDrawReplacement('ai');
+                    return; // Replacement draw logic will handle next steps
+                }
+            }
+        }
+    }
 
-    // 3. AI Discards
+    // 4. AI Discards
     vsAiDiscard();
 }
 
@@ -2475,5 +2534,88 @@ function rollbackVsMove() {
     vsGameState.currentSeed = lastState.currentSeed;
     
     renderVsArena();
+}
+
+
+function executeKanSelf(kan) {
+    saveVsSnapshot();
+    if (kan.type === 'ankan') {
+        vsGameState.player.closed = vsGameState.player.closed.filter(t => t !== kan.tile);
+        vsGameState.player.open.push({ tiles: [kan.tile, kan.tile, kan.tile, kan.tile], isClosed: true });
+    } else {
+        // Kakan
+        const meldIndex = vsGameState.player.open.findIndex(m => !Array.isArray(m) ? (m.tiles[0] === kan.tile) : (m[0] === kan.tile && m.length === 3));
+        if (Array.isArray(vsGameState.player.open[meldIndex])) {
+            vsGameState.player.open[meldIndex].push(kan.tile);
+        } else {
+            vsGameState.player.open[meldIndex].tiles.push(kan.tile);
+        }
+        vsGameState.player.closed.splice(vsGameState.player.closed.indexOf(kan.tile), 1);
+    }
+    vsGameState.trajectory.push({ actor: 'player', action: kan.type, tile: kan.tile });
+    vsDrawReplacement('player');
+}
+
+function vsDrawReplacement(actor) {
+    if (vsGameState.wall.length === 0) {
+        vsGameState.isGameOver = true;
+        vsGameState.winner = 'draw';
+        renderVsArena();
+        return;
+    }
+    
+    const tile = vsGameState.wall.shift();
+    vsGameState[actor].closed.push(tile);
+    vsGameState.trajectory.push({ actor, action: 'draw_replacement', tile });
+    
+    if (actor === 'ai') {
+        showAiActionBubble('槓');
+    }
+    
+    if (isWinningHand(vsGameState[actor].closed, vsGameState[actor].open.length)) {
+        vsGameState.isGameOver = true;
+        vsGameState.winner = actor;
+        showAiActionBubble('自摸');
+    }
+    
+    renderVsArena();
+}
+
+function showKanModal(options) {
+    let modalEl = document.getElementById('chi-modal-root'); // Reuse chi modal root
+    if (!modalEl) {
+        modalEl = document.createElement('div');
+        modalEl.id = 'chi-modal-root';
+        document.body.appendChild(modalEl);
+    }
+
+    modalEl.innerHTML = `
+        <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div class="bg-white rounded-2xl w-full max-w-xs p-6 shadow-2xl animate-fade-in-up">
+                <h3 class="font-bold text-gray-800 mb-4 text-center">Choose Kan Type</h3>
+                <div class="flex flex-col gap-3">
+                    ${options.map((opt, i) => `
+                        <button class="kan-opt-btn flex items-center justify-center gap-2 p-3 border-2 border-gray-100 rounded-xl hover:border-orange-500 hover:bg-orange-50 transition" data-index="${i}">
+                            ${renderTile(opt.tile, { size: 'xs' })}
+                            <span class="text-xs font-bold text-gray-600">${opt.type === 'ankan' ? '暗槓' : '加槓'}</span>
+                        </button>
+                    `).join('')}
+                </div>
+                <button id="close-kan-modal" class="w-full mt-4 text-gray-500 font-bold py-2">Cancel</button>
+            </div>
+        </div>
+    `;
+
+    document.querySelectorAll('.kan-opt-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = parseInt(e.currentTarget.dataset.index);
+            modalEl.innerHTML = '';
+            executeKanSelf(options[index]);
+        });
+    });
+
+    document.getElementById('close-kan-modal').addEventListener('click', () => {
+        modalEl.innerHTML = '';
+    });
 }
 
