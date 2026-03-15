@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.3.9)
+# Taiwan Mahjong Trainer - Project Specification (v1.4.0)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 

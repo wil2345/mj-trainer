@@ -186,7 +186,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.9</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.4.0</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -2198,9 +2198,24 @@ function checkAiInterrupt(tile) {
     }
 
     // AI logic for Pon/Chi/Kan
-    const currentAnalysis = getDiscardAnalysis(vsGameState.ai.closed, vsGameState.ai.open.length);
-    const currentShanten = currentAnalysis.length > 0 ? currentAnalysis[0].shanten : calculateShanten(vsGameState.ai.closed, vsGameState.ai.open.length);
-    const currentAcceptance = currentAnalysis.length > 0 ? currentAnalysis[0].acceptance : 0;
+    // We must evaluate the CURRENT resting hand (e.g. 16 tiles). It is a 3n+1 hand.
+    // We calculate its shanten directly, and find its acceptance by simulating a draw.
+    const currentShanten = calculateShanten(vsGameState.ai.closed, vsGameState.ai.open.length);
+    let currentAcceptance = 0;
+
+    const initialCounts = {};
+    vsGameState.ai.closed.forEach(t => {
+        initialCounts[t] = (initialCounts[t] || 0) + 1;
+    });
+
+    const UNIQUE_TILE_TYPES = Object.keys(TILE_NAMES);
+    UNIQUE_TILE_TYPES.forEach(t => {
+        if ((initialCounts[t] || 0) >= 4) return;
+        const nextHand = [...vsGameState.ai.closed, t];
+        if (calculateShanten(nextHand, vsGameState.ai.open.length) < currentShanten) {
+            currentAcceptance += (4 - (initialCounts[t] || 0));
+        }
+    });
 
     // Gather all tiles explicitly discarded by the player (river + tiles the AI stole)
     const playerDiscards = [...vsGameState.player.river];

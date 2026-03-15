@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mj-trainer-cache-v1.3.5';
+const CACHE_NAME = 'mj-trainer-cache-v1.4.0';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
