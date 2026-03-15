@@ -25,7 +25,7 @@ function sortMahjongHand(hand) {
 }
 
 self.onmessage = function(e) {
-    const { hand, discard, runs, maxDraws, includeHonors, policy } = e.data;
+    const { hand, discard, runs, maxDraws, includeHonors, policy, deadTiles = [] } = e.data;
     const isRandomPolicy = policy === 'random';
     
     // Validate inputs
@@ -42,6 +42,11 @@ self.onmessage = function(e) {
     // Remove tiles in current hand (including the one about to be discarded)
     hand.forEach(t => {
         if (tileCounts[t]) tileCounts[t]--;
+    });
+
+    // Remove visibly dead/known tiles from the pool
+    deadTiles.forEach(t => {
+        if (tileCounts[t] && tileCounts[t] > 0) tileCounts[t]--;
     });
     
     // Generate the flat array of remaining tiles

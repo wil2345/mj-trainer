@@ -185,7 +185,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.2</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.3</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -1472,7 +1472,7 @@ function getMCResultsHtml(stats) {
 // Keep track of active workers to terminate them if a new tile is clicked
 let activeMCWorkers = [];
 
-function runMonteCarlo(hand, discard, totalRuns, maxDraws, includeHonors) {
+function runMonteCarlo(hand, discard, totalRuns, maxDraws, includeHonors, deadTiles = []) {
     // Terminate existing workers
     if (activeMCWorkers.length > 0) {
         activeMCWorkers.forEach(w => w.terminate());
@@ -1493,7 +1493,7 @@ function runMonteCarlo(hand, discard, totalRuns, maxDraws, includeHonors) {
                     mcContainer.innerHTML = getMCLoaderHtml(totalRuns, maxDraws);
                 }
                 
-                runMonteCarlo(hand, discard, totalRuns, maxDraws, includeHonors);
+                runMonteCarlo(hand, discard, totalRuns, maxDraws, includeHonors, deadTiles);
             });
         }
     };
@@ -2291,7 +2291,7 @@ function checkPlayerInterrupt(tile) {
  * Internal helper for AI to run a quick MC simulation on a candidate discard.
  * Returns a Promise that resolves to the win rate.
  */
-function runMCEvaluation(hand, discard, runs, maxDraws, includeHonors) {
+function runMCEvaluation(hand, discard, runs, maxDraws, includeHonors, deadTiles = []) {
     return new Promise((resolve) => {
         const worker = new Worker('./src/js/engine/mcWorker.js', { type: 'module' });
         worker.onmessage = function(e) {
@@ -2309,7 +2309,8 @@ function runMCEvaluation(hand, discard, runs, maxDraws, includeHonors) {
             runs, 
             maxDraws, 
             includeHonors,
-            policy: 'greedy' 
+            policy: 'greedy',
+            deadTiles
         });
     });
 }
@@ -2338,13 +2339,34 @@ async function vsAiDiscard() {
         const iterations = handSizeAfterDiscard === 8 ? 100 : 1000;
         const maxDraws = 3;
         
+        // Collect all known/dead tiles on the board
+        let deadTiles = [];
+        deadTiles.push(...vsGameState.player.river);
+        deadTiles.push(...vsGameState.ai.river);
+        
+        // Helper to extract tiles from open melds (which can be arrays or objects with .tiles)
+        const extractOpenTiles = (openMelds) => {
+            let tiles = [];
+            openMelds.forEach(meld => {
+                if (Array.isArray(meld)) {
+                    tiles.push(...meld);
+                } else if (meld.tiles) {
+                    tiles.push(...meld.tiles);
+                }
+            });
+            return tiles;
+        };
+        
+        deadTiles.push(...extractOpenTiles(vsGameState.player.open));
+        deadTiles.push(...extractOpenTiles(vsGameState.ai.open));
+
         // Consider only top 3 candidates from filtered analysis
         const candidates = analysis.slice(0, Math.min(3, analysis.length));
         
         if (candidates.length > 1) {
             // Evaluate each candidate in parallel
             const evaluations = await Promise.all(candidates.map(c => 
-                runMCEvaluation(vsGameState.ai.closed, c.discard, iterations, maxDraws, true)
+                runMCEvaluation(vsGameState.ai.closed, c.discard, iterations, maxDraws, true, deadTiles)
             ));
             
             // Find candidate with highest win rate

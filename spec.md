@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.3.2)
+# Taiwan Mahjong Trainer - Project Specification (v1.3.3)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
@@ -70,6 +70,7 @@ Beyond isolated efficiency training, the app features a full 1-on-1 AI Arena to 
 *   **Mechanics:**
     *   Simulates drawing and discarding repeatedly until a Win (-1 Shanten) or the max draw limit is reached.
     *   The bot uses a selectable policy (Greedy or Random) to play out the simulation.
+    *   **Context-Aware Simulation:** The engine automatically detects "dead" tiles from the board (e.g., rivers and open melds in AI Arena) and subtracts them from the remaining wall prior to simulation, ensuring precise real-world probabilities.
 *   **Settings Modal:**
     *   **Hand Sizes:** 5, 8, 11, 14, and 17 tiles.
     *   **Tile Pool:** Option to include or exclude Winds & Dragons. **Defaults to On**.
