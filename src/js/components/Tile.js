@@ -38,7 +38,7 @@ function getTileDetails(tileCode) {
  * @param {Object} options - { size: 'md', onClick: null, extraClasses: '' }
  * @returns {string} HTML string
  */
-export const renderTile = (tileCode, { size = 'md', extraClasses = '', id = '' } = {}) => {
+export const renderTile = (tileCode, { size = 'md', extraClasses = '', id = '', faceDown = false } = {}) => {
     // Fixed size classes: use font-size to drive the tile size, avoiding forced w/h stretching
     const sizeClasses = {
         xs: 'text-3xl w-[1.1em] h-[1.5em]',
@@ -46,6 +46,20 @@ export const renderTile = (tileCode, { size = 'md', extraClasses = '', id = '' }
         md: 'text-6xl w-[1.1em] h-[1.5em]',
         lg: 'text-7xl w-[1.1em] h-[1.5em]'
     };
+
+    if (faceDown) {
+        return `
+            <div 
+                ${id ? `id="${id}"` : ''}
+                class="tile-container relative inline-flex flex-col transition-all ${sizeClasses[size]} ${extraClasses} select-none"
+            >
+                <div class="absolute inset-0 bg-gray-300 rounded-md mt-[10%]"></div>
+                <div class="absolute inset-0 bottom-[6%] bg-yellow-500 border-[0.5px] border-yellow-600 rounded-md overflow-hidden flex items-center justify-center">
+                    <div class="absolute inset-[2px] bg-yellow-400 rounded-sm"></div>
+                </div>
+            </div>
+        `;
+    }
 
     const { char, colorClass } = getTileDetails(tileCode);
     

@@ -1,9 +1,9 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.2.4)
+# Taiwan Mahjong Trainer - Project Specification (v1.3.0)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
 
-Unlike full game simulators, this app focuses heavily on **efficiency training**: calculating "Shanten" (how many tiles away from a winning hand) and finding the mathematically optimal discard to maximize "tile acceptance" (進張數).
+Beyond isolated efficiency training, the app features a full 1-on-1 AI Arena to simulate real game conditions including calling mechanics and endgame pressure.
 
 ## 2. Technology Stack
 *   **Frontend Environment:** Vanilla JavaScript (ES6+ modules), HTML5.
@@ -45,7 +45,25 @@ Unlike full game simulators, this app focuses heavily on **efficiency training**
     *   If correct (but multiple optimal moves exist), it shows a slider of the *other* optimal choices.
 *   **Share Functionality:** Generates a custom URL with the exact hand state (e.g., `?hand=123m456p`) and copies it to the clipboard.
 
-### D. Monte Carlo Simulation Mode (蒙地卡羅演算法)
+### D. AI對戰練習 (1-on-1 AI Arena)
+*   **Objective:** A full game simulation where the player plays against an AI bot in a 16-tile Taiwan Mahjong match.
+*   **Full Mechanics:** Supports all standard Mahjong actions:
+    *   **上 (Chi)**: Forming sequences from opponent discards.
+    *   **碰 (Pon)**: Forming triplets from opponent discards.
+    *   **槓 (Kan)**: Open Kan, Ankan (Closed), and Kakan (Added). 
+    *   **食 (Ron) / 自摸 (Tsumo)**: Winning mechanics with full Shanten validation.
+*   **AI Settings:**
+    *   **Difficulty (難度):** Expert (Perfect efficiency), Beginner (Suboptimal moves), Random (Random discards).
+    *   **Play Style (打法風格):** Aggressive (Calls to maintain Shanten), Balanced (Calls only to improve Shanten), Defensive (Never calls).
+    *   **Show AI Tenpai Indicator:** Toggles a red "聽牌" badge when the AI is one tile from winning.
+*   **Advanced Features:**
+    *   **Expert MC Logic:** The Expert AI uses internal Monte Carlo simulations for endgame hands (8 or fewer tiles) to evaluate the best long-term discard.
+    *   **Undo (悔棋):** Step back to previous moves to correct mistakes or test different strategies.
+    *   **Seeded Matches:** Every game has a unique numeric seed, allowing matches to be perfectly reproduced and shared.
+    *   **Feedback:** Phone-style notifications for all AI actions and high-visibility highlighting for the latest discarded tiles.
+    *   **Realism:** AI Ankan tiles remain hidden until game-over or manual "Show Hand" toggle.
+
+### E. Monte Carlo Simulation Mode (蒙地卡羅演算法)
 *   **Objective:** A deep-dive analytical mode to simulate thousands of future draws based on a specific discard. It evaluates the absolute best long-term outcome rather than just the immediate 1-step acceptance.
 *   **Mechanics:**
     *   Simulates drawing and discarding repeatedly until a Win (-1 Shanten) or the max draw limit is reached.
@@ -67,7 +85,7 @@ Unlike full game simulators, this app focuses heavily on **efficiency training**
     *   **Top 20 Final Hands:** A detailed breakdown of the exact shapes the hand ended in, sorted by occurrence count and resulting Shanten, complete with exact probabilities and frequency counts.
     *   **Rerun:** Users can trigger a fresh background simulation bypassing the local cache to re-verify stochastic results.
 
-### E. Calculator Mode (進張計算機)
+### F. Calculator Mode (進張計算機)
 *   **Objective:** A sandbox mode for testing custom hands.
 *   **Functionality:** 
     *   Users can freely click tiles in generated hands to see their exact discard stats without affecting their dashboard Accuracy.

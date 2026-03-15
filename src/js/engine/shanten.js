@@ -275,10 +275,78 @@ const getShiLiuBuDaShanten = (hand) => {
 };
 
 /**
+ * Checks if a hand can Pon a specific tile.
+ * Returns the pair used to Pon, or null.
+ */
+export const getPonOptions = (hand, tile) => {
+    const count = hand.filter(t => t === tile).length;
+    return count >= 2 ? [tile, tile] : null;
+};
+
+/**
+ * Checks if a hand can Kan a specific tile (Open Kan).
+ */
+export const getKanOptions = (hand, tile) => {
+    const count = hand.filter(t => t === tile).length;
+    return count === 3 ? [tile, tile, tile] : null;
+};
+
+/**
+ * Checks for possible Ankan (Closed) or Kakan (Added) in hand.
+ * Returns array of tile codes.
+ */
+export const getClosedKanOptions = (hand, openMelds = []) => {
+    const options = [];
+    const counts = {};
+    hand.forEach(t => counts[t] = (counts[t] || 0) + 1);
+    
+    // Check for 4 of a kind in hand (Ankan)
+    for (const tile in counts) {
+        if (counts[tile] === 4) options.push({ tile, type: 'ankan' });
+    }
+    
+    // Check for Kakan (Adding to existing Pon)
+    openMelds.forEach(meld => {
+        if (meld.length === 3 && meld[0] === meld[1] && hand.includes(meld[0])) {
+            options.push({ tile: meld[0], type: 'kakan' });
+        }
+    });
+    
+    return options;
+};
+
+/**
+ * Checks if a hand can Chi a specific tile.
+ * Returns an array of possible 2-tile combinations that form a sequence with the tile.
+ */
+export const getChiOptions = (hand, tile) => {
+    if (tile[1] === 'z') return []; // Cannot Chi honors
+    const val = parseInt(tile[0]);
+    const suit = tile[1];
+    const options = [];
+    
+    // Case 1: [val-2, val-1, (val)]
+    if (val >= 3 && hand.includes(`${val-2}${suit}`) && hand.includes(`${val-1}${suit}`)) {
+        options.push([`${val-2}${suit}`, `${val-1}${suit}`]);
+    }
+    // Case 2: [val-1, (val), val+1]
+    if (val >= 2 && val <= 8 && hand.includes(`${val-1}${suit}`) && hand.includes(`${val+1}${suit}`)) {
+        options.push([`${val-1}${suit}`, `${val+1}${suit}`]);
+    }
+    // Case 3: [(val), val+1, val+2]
+    if (val <= 7 && hand.includes(`${val+1}${suit}`) && hand.includes(`${val+2}${suit}`)) {
+        options.push([`${val+1}${suit}`, `${val+2}${suit}`]);
+    }
+    return options;
+};
+
+/**
  * Calculates accurate Shanten for any size hand (base size before drawing: 3n)
  * e.g., Base 16 for 17-tile Taiwan, Base 13 for 14-tile JP/HK, Base 4, 7, 10 for practice.
+ * @param {string[]} hand - The closed hand array
+ * @param {number} openMeldsCount - Number of melds already opened (Chi/Pon/Kan)
  */
-export const calculateShanten = (hand) => {
+export const calculateShanten = (hand, openMeldsCount = 0) => {
     let counts = handToSuitCounts(hand);
 
     let totalCombos = [{m:0, t:0, p:0}];
@@ -287,24 +355,26 @@ export const calculateShanten = (hand) => {
     totalCombos = mergeCombos(totalCombos, getSuitCombos(counts.s));
     totalCombos = mergeCombos(totalCombos, getHonorCombos(counts.z));
 
-    // Calculate required melds based on hand size.
-    // E.g. A 16-tile base hand (before drawing to 17) requires 5 melds.
-    // E.g. A 17-tile hand (after drawing) requires 5 melds and 1 pair to WIN (-1 shanten).
-    // The formula targets the base size: Math.floor(hand.length / 3)
+    // Calculate required melds based on hand size + open melds.
+    // E.g. A 16-tile base hand (before drawing to 17) requires 5 melds total.
+    // If 1 meld is open, we only need 4 more melds in the closed hand.
     const isDrawnState = hand.length % 3 === 2;
     const baseLength = isDrawnState ? hand.length - 1 : hand.length;
-    const targetMelds = Math.floor(baseLength / 3);
-    const maxShanten = targetMelds * 2; // e.g. 5 melds = 10 shanten max
+    // Total tiles (closed + open) should be around 16 for Taiwan
+    const totalTilesEquivalent = baseLength + (openMeldsCount * 3);
+    const targetMeldsTotal = Math.floor(totalTilesEquivalent / 3);
+    const targetMeldsClosed = targetMeldsTotal - openMeldsCount;
+    
+    const maxShanten = targetMeldsClosed * 2; 
 
     let minShanten = 99;
     for (let r of totalCombos) {
-        let usable_taatsus = Math.min(r.t, targetMelds - r.m);
+        let usable_taatsus = Math.min(r.t, targetMeldsClosed - r.m);
         // Formula: MaxShanten - (2 * Melds) - UsableTaatsus - Pair
         let shanten = maxShanten - (2 * r.m) - usable_taatsus - r.p;
         
-        // If the hand is in a "drawn" state (e.g. 17 tiles), check if it's already complete.
-        // A complete 17-tile hand has exactly targetMelds (5) and 1 pair.
-        if (isDrawnState && r.m === targetMelds && r.p === 1) {
+        // If the hand is in a "drawn" state (e.g. 17 tiles total), check if it's already complete.
+        if (isDrawnState && r.m === targetMeldsClosed && r.p === 1) {
             minShanten = -1; // Standard Winning Hand
             break;
         }
@@ -315,15 +385,17 @@ export const calculateShanten = (hand) => {
     }
 
     // --- Special Form Calculations ---
-    if (baseLength === 13) {
-        // Japanese 13-tile base special forms (For Tenhou tests / 14-tile practice)
-        minShanten = Math.min(minShanten, getChiitoitsuShanten(hand));
-        minShanten = Math.min(minShanten, getKokushiShanten(hand));
-    } else if (baseLength === 16) {
-        // Taiwan 16-tile base special forms (17-tile practice)
-        minShanten = Math.min(minShanten, getLiGuLiGuShanten(hand));
-        minShanten = Math.min(minShanten, getTaiwanKokushiShanten(hand));
-        minShanten = Math.min(minShanten, getShiLiuBuDaShanten(hand));
+    // Note: Special forms (Chiitoitsu, Kokushi, etc) usually require a FULL closed hand.
+    // If openMeldsCount > 0, most special forms are impossible.
+    if (openMeldsCount === 0) {
+        if (baseLength === 13) {
+            minShanten = Math.min(minShanten, getChiitoitsuShanten(hand));
+            minShanten = Math.min(minShanten, getKokushiShanten(hand));
+        } else if (baseLength === 16) {
+            minShanten = Math.min(minShanten, getLiGuLiGuShanten(hand));
+            minShanten = Math.min(minShanten, getTaiwanKokushiShanten(hand));
+            minShanten = Math.min(minShanten, getShiLiuBuDaShanten(hand));
+        }
     }
 
     return minShanten;
@@ -332,21 +404,23 @@ export const calculateShanten = (hand) => {
 /**
  * Checks if a fully drawn hand (3n + 2) is a winning hand.
  */
-export const isWinningHand = (hand) => {
+export const isWinningHand = (hand, openMeldsCount = 0) => {
     dpMemo.clear();
-    return calculateShanten(hand) === -1;
+    return calculateShanten(hand, openMeldsCount) === -1;
 };
 
 /**
  * For a 17-tile hand, find all possible discards and their resulting tile acceptance.
  */
-export const getDiscardAnalysis = (hand) => {
+export const getDiscardAnalysis = (hand, openMeldsCount = 0) => {
     dpMemo.clear(); // Clear cache at the start of a new analysis run to save memory
     
     const analysis = [];
     const uniqueTiles = [...new Set(hand)];
     
     // Count current occurrences to prevent drawing > 4 of a tile
+    // Note: In a real game, we'd also need to subtract open melds and discards.
+    // But for "Efficiency Trainer" logic, we assume the deck still has 4 minus what is in our hand.
     const initialCounts = {};
     hand.forEach(tile => {
         initialCounts[tile] = (initialCounts[tile] || 0) + 1;
@@ -358,7 +432,7 @@ export const getDiscardAnalysis = (hand) => {
         const index = tempHand.indexOf(discard);
         tempHand.splice(index, 1);
         
-        const currentShanten = calculateShanten(tempHand);
+        const currentShanten = calculateShanten(tempHand, openMeldsCount);
         
         // Find accepted tiles
         let acceptanceCount = 0;
@@ -368,20 +442,12 @@ export const getDiscardAnalysis = (hand) => {
         const UNIQUE_TILE_TYPES = Object.keys(TILE_NAMES);
 
         UNIQUE_TILE_TYPES.forEach(tile => {
-            // How many of this tile did we originally draw?
             const countInHand = initialCounts[tile] || 0;
-            
-            // To simulate the draw, we add 'tile' to our 16-tile hand.
-            // If the resulting 17-tile hand has a lower shanten, it's an accepted tile.
             const nextHand = [...tempHand, tile];
             
-            // We can never draw a tile if we already drew all 4 copies initially.
             if (countInHand >= 4) return;
 
-            if (calculateShanten(nextHand) < currentShanten) {
-                // The remaining tiles in the deck are ALWAYS 4 minus whatever we
-                // originally held in our initial hand. Discarding a tile doesn't 
-                // put it back into the deck to be drawn again.
+            if (calculateShanten(nextHand, openMeldsCount) < currentShanten) {
                 const remaining = 4 - countInHand;
                 acceptanceCount += remaining;
                 acceptedTiles.push({ tile, count: remaining });

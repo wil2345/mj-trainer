@@ -1,11 +1,11 @@
-// app.js
+﻿// app.js
 // Main entry point for the Taiwan Mahjong Trainer application
 
 import { loadStats, updateStat, getAccuracy, clearStats, getAverageTime } from './storage.js';
 import { renderTile } from './components/Tile.js';
 import { generateTrainingHand, sortHand } from './engine/handGenerator.js';
-import { getDiscardAnalysis, isWinningHand } from './engine/shanten.js';
-import { TILE_NAMES, TILE_MAP } from './constants.js';
+import { getDiscardAnalysis, isWinningHand, getChiOptions, getPonOptions, calculateShanten, getKanOptions, getClosedKanOptions } from './engine/shanten.js';
+import { TILE_NAMES, TILE_MAP, createDeck } from './constants.js';
 let currentGameState = {
     mode: null,
     hand: [],
@@ -25,7 +25,10 @@ let currentGameState = {
     mcRuns: 1000,
     mcPolicy: 'greedy', // 'greedy' (最大機率) or 'random' (隨機)
     isMCRunning: false,
-    mcCache: {}
+    mcCache: {},
+    aiDifficulty: 'expert', // 'expert', 'beginner', 'random'
+    aiStyle: 'balanced',   // 'balanced', 'defensive'
+    showAiTenpai: false
 };
 
 let liveTimerInterval = null;
@@ -182,7 +185,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.2.4</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.3.0</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -257,11 +260,24 @@ function initApp() {
                     </div>
                 </div>
 
+                <div id="btn-vs" class="bg-white p-5 rounded-xl shadow-md border border-gray-200 flex items-center justify-between cursor-pointer hover:border-orange-500 hover:shadow-lg transition group">
+                    <div class="text-left">
+                        <p class="font-bold text-gray-800 text-lg">AI對戰練習</p>
+                        <p class="text-xs text-gray-500 mt-1">Full match against the AI.</p>
+                    </div>
+                    <div class="bg-orange-50 group-hover:bg-orange-500 p-3 rounded-xl transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-orange-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h.01M15 9h.01M8 13h8" />
+                        </svg>
+                    </div>
+                </div>
+
                 <div id="btn-mc" class="bg-white p-5 rounded-xl shadow-md border border-gray-200 flex items-center justify-between cursor-pointer hover:border-purple-500 hover:shadow-lg transition group">
                     <div class="text-left">
                         <p class="font-bold text-gray-800 text-lg">蒙地卡羅演算法</p>
                         <p class="text-xs text-gray-500 mt-1">Deep simulation for sub-hands.</p>
                     </div>
+
                     <div class="bg-purple-50 group-hover:bg-purple-500 p-3 rounded-xl transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
@@ -287,6 +303,10 @@ function initApp() {
         currentGameState.includeHonors = true; // Default to true for MC mode
         showSettingsModal('蒙地卡羅演算法', true, false, true); // (mode, isCalc, isUpdate, isMCMode)
     });
+
+    document.getElementById('btn-vs').addEventListener('click', () => {
+        startVsMode();
+    });
 }
 
 function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
@@ -297,6 +317,8 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
         document.body.appendChild(modalEl);
     }
 
+    const isVsMode = modeName === 'AI對戰練習';
+
     let tempSize = currentGameState.selectedHandSize;
     let tempHonors = currentGameState.includeHonors;
     let tempRecordTime = currentGameState.recordTime;
@@ -304,15 +326,21 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
     let tempMCDraws = currentGameState.mcDraws || 5;
     let tempMCRuns = currentGameState.mcRuns || 1000;
     
-    const activeColorClass = isMCMode ? 'bg-purple-500' : (isCalculator ? 'bg-blue-500' : 'bg-mj-green');
-    const sizes = [5, 8, 11, 14, 17]; // Allow all sizes for MC mode now
+    // AI Settings
+    let tempAiDifficulty = currentGameState.aiDifficulty || 'expert';
+    let tempAiStyle = currentGameState.aiStyle || 'aggressive';
+    let tempShowAiTenpai = currentGameState.showAiTenpai || false;
+
+    const activeColorClass = isMCMode ? 'bg-purple-500' : (isCalculator ? 'bg-blue-500' : (isVsMode ? 'bg-orange-500' : 'bg-mj-green'));
+    const sizes = [5, 8, 11, 14, 17];
     
-    // Ensure current size is valid for the mode
-    if (!sizes.includes(tempSize)) {
-        tempSize = sizes.includes(8) ? 8 : sizes[sizes.length - 1];
+    if (isVsMode) {
+        tempSize = 17;
+        tempHonors = true; // AI Arena always uses full deck
+    } else if (!sizes.includes(tempSize)) {
+        tempSize = 8;
     }
 
-    // Build the outer modal structure ONCE
     modalEl.innerHTML = `
         <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
             <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl animate-fade-in-up transition-colors">
@@ -323,11 +351,11 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
                     </button>
                 </div>
                 <div class="p-5 flex flex-col gap-5">
+                    
+                    ${!isVsMode ? `
                     <div>
                         <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Hand Size</p>
-                        <div class="flex gap-2" id="modal-size-container">
-                            <!-- Size buttons rendered here -->
-                        </div>
+                        <div class="flex gap-2" id="modal-size-container"></div>
                     </div>
                     <div>
                         <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Tile Pool</p>
@@ -338,7 +366,39 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
                             </div>
                         </div>
                     </div>
-                    ${!isCalculator && !isMCMode ? `
+                    ` : ''}
+
+                    ${isVsMode ? `
+                    <div>
+                        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">AI Settings</p>
+                        <div class="grid grid-cols-1 gap-3 border border-gray-100 dark:border-gray-700 rounded-xl p-3 bg-gray-50/50 dark:bg-gray-800/50">
+                            <div class="flex flex-col">
+                                <label class="text-[11px] font-bold text-gray-400 mb-1">Difficulty (難度)</label>
+                                <select id="ai-difficulty-select" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-orange-500">
+                                    <option value="expert" ${tempAiDifficulty === 'expert' ? 'selected' : ''}>專家 (Expert)</option>
+                                    <option value="beginner" ${tempAiDifficulty === 'beginner' ? 'selected' : ''}>新手 (Beginner)</option>
+                                    <option value="random" ${tempAiDifficulty === 'random' ? 'selected' : ''}>隨機 (Random)</option>
+                                </select>
+                            </div>
+                            <div class="flex flex-col">
+                                <label class="text-[11px] font-bold text-gray-400 mb-1">Play Style (打法風格)</label>
+                                <select id="ai-style-select" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-orange-500">
+                                    <option value="aggressive" ${tempAiStyle === 'aggressive' ? 'selected' : ''}>積極 (Aggressive)</option>
+                                    <option value="balanced" ${tempAiStyle === 'balanced' ? 'selected' : ''}>平衡 (Balanced)</option>
+                                    <option value="defensive" ${tempAiStyle === 'defensive' ? 'selected' : ''}>保守 (Defensive)</option>
+                                </select>
+                            </div>
+                            <div id="modal-ai-tenpai-toggle-wrapper" class="flex items-center justify-between p-2 border border-gray-100 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer select-none mt-1">
+                                <span class="text-xs text-gray-700 dark:text-gray-300 font-medium">Show AI Tenpai (聽牌) Indicator</span>
+                                <div class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${tempShowAiTenpai ? activeColorClass : 'bg-gray-200 dark:bg-gray-600'}">
+                                    <span class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${tempShowAiTenpai ? 'translate-x-5' : 'translate-x-1'}"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    ${!isCalculator && !isMCMode && !isVsMode ? `
                     <div>
                         <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Time</p>
                         <div class="flex flex-col gap-2">
@@ -393,13 +453,14 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
                 </div>
                 <div class="p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 sticky bottom-0 z-10">
                     <button id="apply-settings" class="${activeColorClass} hover:opacity-90 text-white font-bold px-6 py-3 rounded-xl shadow-md transition active:scale-95 w-full">
-                        ${isUpdate ? 'Apply & Restart Hand' : 'Start'}
+                        ${isUpdate ? (isVsMode ? 'Apply Changes' : 'Apply & Restart Hand') : 'Start'}
                     </button>
                 </div>
             </div>
         </div>
     `;
 
+    // --- Helper UI Updaters ---
     const updateSizeButtons = () => {
         const container = document.getElementById('modal-size-container');
         if (!container) return;
@@ -409,65 +470,20 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
             </button>
         `).join('');
 
-        // Re-bind click events for the new buttons
         document.querySelectorAll('.modal-size-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 tempSize = parseInt(e.currentTarget.dataset.size);
-                updateSizeButtons(); // Only update the buttons, not the whole modal
+                updateSizeButtons();
             });
         });
     };
 
-    // Initial render of buttons
-    updateSizeButtons();
-
-    const updateHonorsToggleUI = () => {
-        const toggleWrapper = document.getElementById('modal-honors-toggle-wrapper');
-        if (!toggleWrapper) return;
-        
-        const track = toggleWrapper.querySelector('.transition-colors');
-        const knob = toggleWrapper.querySelector('.transition-transform');
-        
-        if (tempHonors) {
-            track.classList.remove('bg-gray-200', 'dark:bg-gray-600');
-            track.classList.add(activeColorClass);
-            knob.classList.remove('translate-x-1');
-            knob.classList.add('translate-x-6');
-        } else {
-            track.classList.remove(activeColorClass);
-            track.classList.add('bg-gray-200', 'dark:bg-gray-600');
-            knob.classList.remove('translate-x-6');
-            knob.classList.add('translate-x-1');
-        }
-    };
-    
-    const updateTimeToggleUI = () => {
-        const toggleWrapper = document.getElementById('modal-time-toggle-wrapper');
-        if (!toggleWrapper) return;
-
-        const track = toggleWrapper.querySelector('.transition-colors');
-        const knob = toggleWrapper.querySelector('.transition-transform');
-
-        if (tempRecordTime) {
-            track.classList.remove('bg-gray-200', 'dark:bg-gray-600');
-            track.classList.add(activeColorClass);
-            knob.classList.remove('translate-x-1');
-            knob.classList.add('translate-x-6');
-        } else {
-            track.classList.remove(activeColorClass);
-            track.classList.add('bg-gray-200', 'dark:bg-gray-600');
-            knob.classList.remove('translate-x-6');
-            knob.classList.add('translate-x-1');
-        }
-    };
-    const updateShowTimerToggleUI = () => {
-        const toggleWrapper = document.getElementById('modal-show-timer-toggle-wrapper');
-        if (!toggleWrapper) return;
-        
-        const track = toggleWrapper.querySelector('.transition-colors');
-        const knob = toggleWrapper.querySelector('.transition-transform');
-        
-        if (currentGameState.showTimer) {
+    const updateToggleUI = (wrapperId, state) => {
+        const wrapper = document.getElementById(wrapperId);
+        if (!wrapper) return;
+        const track = wrapper.querySelector('.transition-colors');
+        const knob = wrapper.querySelector('.transition-transform');
+        if (state) {
             track.classList.remove('bg-gray-200', 'dark:bg-gray-600');
             track.classList.add(activeColorClass);
             knob.classList.remove('translate-x-1');
@@ -480,15 +496,17 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
         }
     };
 
-    document.getElementById('close-settings').addEventListener('click', () => {
-        modalEl.innerHTML = '';
-    });
+    // --- Initialization ---
+    if (!isVsMode) updateSizeButtons();
+
+    // --- Event Listeners ---
+    document.getElementById('close-settings').addEventListener('click', () => { modalEl.innerHTML = ''; });
 
     const honorsWrapper = document.getElementById('modal-honors-toggle-wrapper');
     if (honorsWrapper) {
         honorsWrapper.addEventListener('click', () => {
             tempHonors = !tempHonors;
-            updateHonorsToggleUI();
+            updateToggleUI('modal-honors-toggle-wrapper', tempHonors);
         });
     }
 
@@ -496,7 +514,7 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
     if (timeWrapper) {
         timeWrapper.addEventListener('click', () => {
             tempRecordTime = !tempRecordTime;
-            updateTimeToggleUI();
+            updateToggleUI('modal-time-toggle-wrapper', tempRecordTime);
         });
     }
 
@@ -504,82 +522,78 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
     if (showTimerWrapper) {
         showTimerWrapper.addEventListener('click', () => {
             currentGameState.showTimer = !currentGameState.showTimer;
-            updateShowTimerToggleUI();
+            updateToggleUI('modal-show-timer-toggle-wrapper', currentGameState.showTimer);
         });
     }
 
-    const mcToggleWrapper = document.getElementById('modal-mc-toggle-wrapper');
-    if (mcToggleWrapper) {
-        mcToggleWrapper.addEventListener('click', () => {
-            tempEnableMC = !tempEnableMC;
-            const track = mcToggleWrapper.querySelector('.transition-colors');
-            const knob = mcToggleWrapper.querySelector('.transition-transform');
-            const optionsContainer = document.getElementById('mc-options-container');
-            
-            if (tempEnableMC) {
-                track.classList.remove('bg-gray-200', 'dark:bg-gray-600');
-                track.classList.add(activeColorClass);
-                knob.classList.remove('translate-x-1');
-                knob.classList.add('translate-x-6');
-                optionsContainer.classList.remove('hidden');
-                optionsContainer.classList.add('grid');
-            } else {
-                track.classList.remove(activeColorClass);
-                track.classList.add('bg-gray-200', 'dark:bg-gray-600');
-                knob.classList.remove('translate-x-6');
-                knob.classList.add('translate-x-1');
-                optionsContainer.classList.remove('grid');
-                optionsContainer.classList.add('hidden');
-            }
+    const difficultySelect = document.getElementById('ai-difficulty-select');
+    if (difficultySelect) {
+        difficultySelect.addEventListener('change', (e) => { tempAiDifficulty = e.target.value; });
+    }
+
+    const aiStyleSelect = document.getElementById('ai-style-select');
+    if (aiStyleSelect) {
+        aiStyleSelect.addEventListener('change', (e) => { tempAiStyle = e.target.value; });
+    }
+
+    const aiTenpaiWrapper = document.getElementById('modal-ai-tenpai-toggle-wrapper');
+    if (aiTenpaiWrapper) {
+        aiTenpaiWrapper.addEventListener('click', () => {
+            tempShowAiTenpai = !tempShowAiTenpai;
+            updateToggleUI('modal-ai-tenpai-toggle-wrapper', tempShowAiTenpai);
         });
     }
+
+    const mcPolicySelect = document.getElementById('mc-policy-select');
 
     const mcDrawsSelect = document.getElementById('mc-draws-select');
-    if (mcDrawsSelect) {
-        mcDrawsSelect.addEventListener('change', (e) => {
-            tempMCDraws = parseInt(e.target.value);
-        });
-    }
-
     const mcRunsSelect = document.getElementById('mc-runs-select');
-    if (mcRunsSelect) {
-        mcRunsSelect.addEventListener('change', (e) => {
-            tempMCRuns = parseInt(e.target.value);
-        });
-    }
 
     document.getElementById('apply-settings').addEventListener('click', () => {
+        if (isVsMode) {
+            currentGameState.aiDifficulty = tempAiDifficulty;
+            currentGameState.aiStyle = tempAiStyle;
+            currentGameState.showAiTenpai = tempShowAiTenpai;
+            modalEl.innerHTML = '';
+            if (isUpdate) {
+                renderVsArena(); // Refresh labels
+            } else {
+                startVsMode(); // Fresh game
+            }
+            return;
+        }
+
         const handNeedsReset = currentGameState.selectedHandSize !== tempSize || currentGameState.includeHonors !== tempHonors;
-        const mcParamsChanged = 
-            currentGameState.mcDraws !== tempMCDraws || 
-            currentGameState.mcRuns !== tempMCRuns ||
-            (isMCMode && currentGameState.mcPolicy !== document.getElementById('mc-policy-select').value);
+        const mcParamsChanged = isMCMode && (
+            currentGameState.mcDraws !== parseInt(mcDrawsSelect.value) || 
+            currentGameState.mcRuns !== parseInt(mcRunsSelect.value) ||
+            currentGameState.mcPolicy !== mcPolicySelect.value
+        );
 
         currentGameState.selectedHandSize = tempSize;
         currentGameState.includeHonors = tempHonors;
         currentGameState.recordTime = tempRecordTime;
-        currentGameState.enableMC = isMCMode ? true : false;
         currentGameState.isMCMode = isMCMode;
+        
         if (isMCMode) {
-            currentGameState.mcDraws = tempMCDraws;
-            currentGameState.mcRuns = tempMCRuns;
-            currentGameState.mcPolicy = document.getElementById('mc-policy-select').value;
+            currentGameState.mcDraws = parseInt(mcDrawsSelect.value);
+            currentGameState.mcRuns = parseInt(mcRunsSelect.value);
+            currentGameState.mcPolicy = mcPolicySelect.value;
+            currentGameState.enableMC = true;
+        } else {
+            currentGameState.enableMC = false;
         }
 
-        // Clear MC cache if any simulation parameters changed
         if (handNeedsReset || mcParamsChanged) {
             currentGameState.mcCache = {};
+            if (isUpdate && handNeedsReset) currentGameState.hand = [];
         }
 
         modalEl.innerHTML = '';
-        
-        if (isUpdate && handNeedsReset) {
-            currentGameState.hand = [];
-        }
-        
         startTrainingSession(modeName, isCalculator, isMCMode);
     });
 }
+
 
 function startTrainingSession(modeName, isCalculator = false, isMCMode = false) {
     currentGameState.mode = modeName;
@@ -662,7 +676,7 @@ function renderGameScene() {
                 <div class="flex gap-1.5 sm:gap-2 items-center flex-shrink-0">
                     ${(!isCalculator && currentGameState.showTimer && !isResolved) ? `
                         <div class="bg-gray-800 text-white text-xs font-black px-3 py-1.5 rounded flex items-center shadow-inner min-w-[75px] justify-center mr-1">
-                            ⏱️<span id="live-timer-display" class="font-mono w-[4ch] text-right inline-block tracking-tighter">0.0</span><span class="ml-0.5">s</span>
+                            â±ï¸<span id="live-timer-display" class="font-mono w-[4ch] text-right inline-block tracking-tighter">0.0</span><span class="ml-0.5">s</span>
                         </div>
                     ` : ''}
                     
@@ -726,7 +740,7 @@ function renderGameScene() {
                 <div id="feedback-container" class="flex flex-col items-center justify-center w-full">
                     ${isWin ? `
                         <div class="animate-fade-in-up w-full flex flex-col items-center py-2">
-                            <h3 class="text-3xl font-black text-yellow-500 mb-1 tracking-widest drop-shadow-sm">胡牌</h3>
+                            <h3 class="text-3xl font-black text-yellow-500 mb-1 tracking-widest drop-shadow-sm">èƒ¡ç‰Œ</h3>
                             <p class="text-xs text-gray-500 mb-4 font-medium">This is already a winning hand!</p>
                             <button id="next-btn" class="bg-mj-green text-white text-sm font-bold px-8 py-2.5 rounded-lg shadow-md hover:bg-emerald-600 transition active:scale-95">
                                 Next Hand
@@ -817,7 +831,7 @@ function renderGameScene() {
                 currentGameState.mcDraws = 5;
                 currentGameState.mcRuns = 1000;
                 currentGameState.reviewingHistoryIndex = null; // Exit review context
-                startTrainingSession('蒙地卡羅演算法', true, true);
+                startTrainingSession('è’™åœ°å¡ç¾…æ¼”ç®—æ³•', true, true);
             });
         }
         
@@ -830,7 +844,7 @@ function renderGameScene() {
                 currentGameState.mcDraws = 5;
                 currentGameState.mcRuns = 1000;
                 currentGameState.reviewingHistoryIndex = null; // Exit review context
-                startTrainingSession('蒙地卡羅演算法', true, true);
+                startTrainingSession('è’™åœ°å¡ç¾…æ¼”ç®—æ³•', true, true);
             });
         }
     }
@@ -1224,16 +1238,16 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                     
                     <div class="flex items-center gap-4 bg-gray-50 px-4 py-2 rounded-lg border border-gray-100 shadow-inner w-full justify-center">
                         <div class="text-center min-w-[60px]">
-                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">狀態</p>
+                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">ç‹€æ…‹</p>
                             <p class="text-xl font-black tracking-tight ${userMove.shanten === 0 ? 'text-mj-red' : 'text-blue-600'}">
-                                ${userMove.shanten === 0 ? '聽牌' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">向聽</span>`}
+                                ${userMove.shanten === 0 ? 'è½ç‰Œ' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">å‘è½</span>`}
                             </p>
                         </div>
                         <div class="w-px h-8 bg-gray-300 rounded"></div>
                         <div class="text-center min-w-[60px]">
-                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">進張</p>
+                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">é€²å¼µ</p>
                             <p class="text-xl font-black text-blue-500 tracking-tight">
-                                ${userMove.acceptedTiles.length}<span class="text-xs font-bold text-gray-400 mx-0.5">款</span>${userMove.acceptance}<span class="text-xs font-bold text-gray-400 mx-0.5">張</span>
+                                ${userMove.acceptedTiles.length}<span class="text-xs font-bold text-gray-400 mx-0.5">æ¬¾</span>${userMove.acceptance}<span class="text-xs font-bold text-gray-400 mx-0.5">å¼µ</span>
                             </p>
                         </div>
                     </div>
@@ -1285,16 +1299,16 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
 
                     <div class="flex items-center gap-4 bg-gray-50 px-4 py-2 rounded-lg border border-gray-100 shadow-inner w-full justify-center">
                         <div class="text-center min-w-[60px]">
-                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">狀態</p>
+                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">ç‹€æ…‹</p>
                             <p class="text-xl font-black tracking-tight ${userMove.shanten === 0 ? 'text-mj-red' : 'text-blue-600'}">
-                                ${userMove.shanten === 0 ? '聽牌' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">向聽</span>`}
+                                ${userMove.shanten === 0 ? 'è½ç‰Œ' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">å‘è½</span>`}
                             </p>
                         </div>
                         <div class="w-px h-8 bg-gray-300 rounded"></div>
                         <div class="text-center min-w-[60px]">
-                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">進張</p>
+                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">é€²å¼µ</p>
                             <p class="text-xl font-black text-blue-500 tracking-tight">
-                                ${userMove.acceptedTiles.length}<span class="text-xs font-bold text-gray-400 mx-0.5">款</span>${userMove.acceptance}<span class="text-xs font-bold text-gray-400 mx-0.5">張</span>
+                                ${userMove.acceptedTiles.length}<span class="text-xs font-bold text-gray-400 mx-0.5">æ¬¾</span>${userMove.acceptance}<span class="text-xs font-bold text-gray-400 mx-0.5">å¼µ</span>
                             </p>
                         </div>
                     </div>
@@ -1318,16 +1332,16 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                             
                             <div class="flex items-center gap-4 bg-emerald-50/50 px-4 py-2 rounded-lg border border-emerald-100 w-full justify-center mb-1">
                                 <div class="text-center min-w-[60px]">
-                                    <p class="text-[10px] text-emerald-600 font-bold mb-0.5">狀態</p>
+                                    <p class="text-[10px] text-emerald-600 font-bold mb-0.5">ç‹€æ…‹</p>
                                     <p class="text-xl font-black tracking-tight ${bestMove.shanten === 0 ? 'text-mj-red' : 'text-emerald-700'}">
-                                        ${bestMove.shanten === 0 ? '聽牌' : `${bestMove.shanten}<span class="text-xs font-bold ml-0.5 text-emerald-600">向聽</span>`}
+                                        ${bestMove.shanten === 0 ? 'è½ç‰Œ' : `${bestMove.shanten}<span class="text-xs font-bold ml-0.5 text-emerald-600">å‘è½</span>`}
                                     </p>
                                 </div>
                                 <div class="w-px h-8 bg-emerald-200 rounded"></div>
                                 <div class="text-center min-w-[60px]">
-                                    <p class="text-[10px] text-emerald-600 font-bold mb-0.5">進張</p>
+                                    <p class="text-[10px] text-emerald-600 font-bold mb-0.5">é€²å¼µ</p>
                                     <p class="text-xl font-black text-emerald-600 tracking-tight">
-                                        ${bestMove.acceptedTiles.length}<span class="text-xs font-bold text-emerald-400 mx-0.5">款</span>${bestMove.acceptance}<span class="text-xs font-bold text-emerald-400 mx-0.5">張</span>
+                                        ${bestMove.acceptedTiles.length}<span class="text-xs font-bold text-emerald-400 mx-0.5">æ¬¾</span>${bestMove.acceptance}<span class="text-xs font-bold text-emerald-400 mx-0.5">å¼µ</span>
                                     </p>
                                 </div>
                             </div>
@@ -1384,11 +1398,11 @@ function getMCResultsHtml(stats) {
     const finalHandsHtml = topFinalHands.length > 0 ? topFinalHands.map((item, idx) => {
         let shantenBadge = '';
         if (item.shanten === -1) {
-            shantenBadge = '<span class="bg-yellow-400 text-white text-[11px] font-black px-2 py-1 rounded shadow-sm whitespace-nowrap">糊牌</span>';
+            shantenBadge = '<span class="bg-yellow-400 text-white text-[11px] font-black px-2 py-1 rounded shadow-sm whitespace-nowrap">ç³Šç‰Œ</span>';
         } else if (item.shanten === 0) {
-            shantenBadge = '<span class="bg-red-500 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">聽牌</span>';
+            shantenBadge = '<span class="bg-red-500 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">è½ç‰Œ</span>';
         } else {
-            shantenBadge = `<span class="bg-gray-400 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">${item.shanten}向聽</span>`;
+            shantenBadge = `<span class="bg-gray-400 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">${item.shanten}å‘è½</span>`;
         }
 
         return `
@@ -1631,3 +1645,835 @@ function runMonteCarlo(hand, discard, totalRuns, maxDraws, includeHonors) {
         });
     }
 }
+
+// --- Seeded Random Helper ---
+function mulberry32(a) {
+    return function() {
+      let t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    }
+}
+
+// --- AI對戰練習 Mode ---
+let vsGameState = {
+    wall: [],
+    player: { closed: [], open: [], river: [] },
+    ai: { closed: [], open: [], river: [] },
+    currentTurn: 'player',
+    pendingAction: null, // { type: 'chi'|'pon'|'kan'|'ron', options: [] }
+    trajectory: [],
+    isGameOver: false,
+    winner: null,
+    showAiHand: false,
+    latestDiscard: null, // { owner: 'player'|'ai', index: number }
+    historyStack: [],
+    currentSeed: null,
+    aiActionMessage: null, // For temporary action bubbles
+    forbiddenDiscard: null // Tile that cannot be discarded this turn (Kuikae rule)
+};
+
+/**
+ * Displays a temporary action bubble over the AI's avatar.
+ */
+function showAiActionBubble(message) {
+    const container = document.getElementById('vs-notification-container');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="bg-gray-900/90 backdrop-blur text-white px-6 py-2.5 rounded-full shadow-2xl flex items-center gap-3 border border-white/10 ring-4 ring-black/5 animate-slide-down">
+            <div class="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">AI</div>
+            <span class="font-bold tracking-wider text-sm">${message}</span>
+        </div>
+    `;
+    
+    // Clear notification after 1.5 seconds
+    setTimeout(() => {
+        container.innerHTML = '';
+    }, 1500);
+}
+
+/**
+ * Saves a snapshot of the current VS game state for rollback support.
+ */
+function saveVsSnapshot() {
+    // Limit stack size to 50 moves to save memory
+    if (vsGameState.historyStack.length >= 50) {
+        vsGameState.historyStack.shift();
+    }
+    
+    // Deep clone the essential state (exclude the stack itself to avoid circular refs)
+    const snapshot = JSON.parse(JSON.stringify({
+        wall: vsGameState.wall,
+        player: vsGameState.player,
+        ai: vsGameState.ai,
+        currentTurn: vsGameState.currentTurn,
+        pendingAction: vsGameState.pendingAction,
+        trajectory: vsGameState.trajectory,
+        isGameOver: vsGameState.isGameOver,
+        winner: vsGameState.winner,
+        showAiHand: vsGameState.showAiHand,
+        latestDiscard: vsGameState.latestDiscard,
+        currentSeed: vsGameState.currentSeed,
+        forbiddenDiscard: vsGameState.forbiddenDiscard
+    }));
+    
+    vsGameState.historyStack.push(snapshot);
+}
+
+function startVsMode(providedSeed = null) {
+    currentGameState.mode = 'AI對戰練習';
+    
+    // Use provided seed or generate a random numeric seed
+    // Ensure seed is a number to avoid [object PointerEvent] issues
+    const seed = (providedSeed !== null && typeof providedSeed === 'number') 
+        ? providedSeed 
+        : Math.floor(Math.random() * 1000000);
+    vsGameState.currentSeed = seed;
+    
+    const seededRandom = mulberry32(seed);
+    
+    // Initialize Wall (136 tiles, no flowers)
+    vsGameState.wall = createDeck();
+    
+    // Seeded Shuffle
+    for (let i = vsGameState.wall.length - 1; i > 0; i--) {
+        const j = Math.floor(seededRandom() * (i + 1));
+        [vsGameState.wall[i], vsGameState.wall[j]] = [vsGameState.wall[j], vsGameState.wall[i]];
+    }
+
+    // Deal 16 tiles each
+    vsGameState.player = {
+        closed: sortHand(vsGameState.wall.splice(0, 16)),
+        open: [],
+        river: []
+    };
+    vsGameState.ai = {
+        closed: sortHand(vsGameState.wall.splice(0, 16)),
+        open: [],
+        river: []
+    };
+
+    vsGameState.currentTurn = 'player';
+    vsGameState.isGameOver = false;
+    vsGameState.winner = null;
+    vsGameState.trajectory = [];
+    vsGameState.pendingAction = null;
+    vsGameState.showAiHand = false;
+    vsGameState.latestDiscard = null;
+    vsGameState.historyStack = [];
+    vsGameState.forbiddenDiscard = null;
+
+    // Player draws the 17th tile to start
+    const firstTile = vsGameState.wall.shift();
+    vsGameState.player.closed.push(firstTile);
+    vsGameState.trajectory.push({ actor: 'player', action: 'draw', tile: firstTile });
+
+    renderVsArena();
+    
+    // Initial check for self-draw win (extremely rare but possible)
+    if (isWinningHand(vsGameState.player.closed, vsGameState.player.open.length)) {
+        vsGameState.isGameOver = true;
+        vsGameState.winner = 'player';
+        renderVsArena();
+    }
+}
+
+function renderVsArena() {
+    const appContainer = document.getElementById('app');
+    const { player, ai, wall, currentTurn, isGameOver, winner, pendingAction, showAiHand, latestDiscard } = vsGameState;
+
+    const renderRiver = (river, owner) => river.map((t, idx) => {
+        const isLatest = latestDiscard && latestDiscard.owner === owner && latestDiscard.index === idx;
+        const size = isLatest ? 'sm' : 'xs';
+        const extraClasses = isLatest ? 'ring-2 ring-blue-500 shadow-md transform -translate-y-1' : 'opacity-80';
+        return renderTile(t, { size, extraClasses });
+    }).join('');
+
+    const renderOpenMelds = (melds, isAi = false) => melds.map(meld => {
+        const isAnkan = !Array.isArray(meld) && meld.isClosed;
+        const tiles = Array.isArray(meld) ? meld : meld.tiles;
+        // Reveal if it's not Ankan, or if it IS Ankan but showAiHand or isGameOver is true
+        const shouldShow = !isAnkan || !isAi || showAiHand || isGameOver;
+        return `
+            <div class="flex border border-gray-200 rounded p-0.5 bg-gray-50">
+                ${tiles.map(t => renderTile(t, { size: 'xs', faceDown: !shouldShow })).join('')}
+            </div>
+        `;
+    }).join('');
+
+    const isAiTenpai = calculateShanten(ai.closed, ai.open.length) === 0;
+    
+    // Check for player's self-actions (Ankan/Kakan) during their turn
+    let turnActions = [];
+    if (currentTurn === 'player' && !isGameOver && !pendingAction && player.closed.length % 3 === 2) {
+        const kanOpts = getClosedKanOptions(player.closed, player.open);
+        if (kanOpts.length > 0) {
+            turnActions.push({ type: 'kan_self', label: '槓', options: kanOpts });
+        }
+    }
+
+    appContainer.innerHTML = `
+        <!-- AI Action Notification (Phone Style) -->
+        ${vsGameState.aiActionMessage ? `
+            <div class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] animate-slide-down">
+                <div class="bg-gray-900/90 backdrop-blur text-white px-6 py-2.5 rounded-full shadow-2xl flex items-center gap-3 border border-white/10 ring-4 ring-black/5">
+                    <div class="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">AI</div>
+                    <span class="font-bold tracking-wider text-sm">${vsGameState.aiActionMessage}</span>
+                </div>
+            </div>
+        ` : ''}
+
+        <div class="flex flex-col items-center justify-start h-full max-w-4xl mx-auto mt-2 px-2 pb-10">
+            <!-- Header -->
+            <div class="w-full flex justify-between items-center mb-3">
+                <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h.01M15 9h.01M8 13h8" />
+                    </svg>
+                    AI對戰練習
+                </h2>
+                <div class="flex items-center gap-2">
+                    <button id="vs-rollback-btn" class="text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 border border-blue-100 flex items-center gap-1 px-2 py-1.5 rounded transition disabled:opacity-30 disabled:cursor-not-allowed" title="Rollback Move (悔棋)" ${vsGameState.historyStack.length === 0 ? 'disabled' : ''}>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                        </svg>
+                        <span class="hidden sm:inline">Undo</span>
+                    </button>
+                    <button id="vs-seed-btn" class="text-xs font-medium text-purple-600 hover:text-purple-800 bg-purple-50 border border-purple-100 flex items-center gap-1 px-2 py-1.5 rounded transition" title="Match Seed">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m0 0a2 2 0 01-2 2m0-4a2 2 0 01-2-2m0 0a2 2 0 012-2m0 4v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2M9 5a2 2 0 114 0" />
+                        </svg>
+                        <span class="hidden sm:inline">Seed: ${vsGameState.currentSeed}</span>
+                    </button>
+                    <button id="vs-settings-btn" class="text-xs font-medium text-orange-600 hover:text-orange-800 bg-orange-50 border border-orange-100 flex items-center gap-1 px-2 py-1.5 rounded transition" title="Settings">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span class="hidden sm:inline">Settings</span>
+                    </button>
+                    <button id="vs-back-btn" class="text-xs font-medium text-gray-500 hover:text-gray-800 flex items-center gap-1 bg-gray-100 px-2 py-1.5 rounded transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                        <span class="hidden sm:inline">Back</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- AI Area -->
+            <div class="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-2">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-[10px] font-bold">AI</div>
+                            ${currentGameState.showAiTenpai && isAiTenpai ? '<span class="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded animate-pulse shadow-sm">聽牌</span>' : ''}
+                        </div>
+                        <div class="flex gap-1 min-h-[24px]" id="ai-open-melds">
+                            ${renderOpenMelds(ai.open)}
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-col items-end gap-1.5">
+                        <div class="flex items-center gap-2">
+                            <button id="toggle-ai-hand-btn" class="text-[10px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition">
+                                ${showAiHand ? 'Hide Hand' : 'Show Hand'}
+                            </button>
+                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">${ai.closed.length} Tiles</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- AI Hand -->
+                <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-center mb-2" id="ai-hand-container">
+                    ${ai.closed.map(t => renderTile(t, { size: 'xs', faceDown: !showAiHand && !isGameOver })).join('')}
+                </div>
+                <!-- AI River -->
+                <div class="flex flex-wrap gap-1 min-h-[40px] bg-gray-50 rounded-lg p-2 justify-start items-end">
+                    ${renderRiver(ai.river, 'ai')}
+                </div>
+            </div>
+
+            <!-- Action Center -->
+            <div class="w-full flex flex-col items-center justify-center py-4 relative min-h-[60px]">
+                <div class="absolute left-0 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-white px-2">
+                    Wall: ${wall.length}
+                </div>
+
+                <div id="vs-action-buttons" class="flex gap-2">
+                    ${pendingAction ? `
+                        ${pendingAction.actions.map(action => `
+                            <button class="vs-action-btn bg-mj-green hover:bg-emerald-600 text-white font-black px-5 py-2 rounded-lg shadow-md transition active:scale-95" data-type="${action.type}">
+                                ${action.label}
+                            </button>
+                        `).join('')}
+                        <button id="vs-skip-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold px-5 py-2 rounded-lg shadow-sm transition active:scale-95">
+                            Skip
+                        </button>
+                    ` : ''}
+                    
+                    ${turnActions.length > 0 ? `
+                        ${turnActions.map(action => `
+                            <button class="vs-turn-action-btn bg-orange-500 hover:bg-orange-600 text-white font-black px-5 py-2 rounded-lg shadow-md transition active:scale-95" data-type="${action.type}">
+                                ${action.label}
+                            </button>
+                        `).join('')}
+                    ` : ''}
+                </div>
+
+                ${isGameOver ? `
+                    <div class="flex flex-col items-center">
+                        <div class="bg-yellow-400 text-white font-black px-6 py-2 rounded-full shadow-lg animate-bounce mt-2">
+                            ${winner === 'player' ? 'YOU WIN!' : (winner === 'ai' ? 'AI WINS!' : 'DRAW (流局)')}
+                        </div>
+                        <button id="vs-restart-btn" class="mt-4 bg-mj-green text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-emerald-600 transition">
+                            Play Again
+                        </button>
+                    </div>
+                ` : ''}
+            </div>
+
+            <!-- Player River -->
+            <div class="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-2">
+                <div class="flex flex-wrap gap-1 min-h-[40px] bg-gray-50 rounded-lg p-2 justify-start items-start">
+                    ${renderRiver(player.river, 'player')}
+                </div>
+            </div>
+
+            <!-- Player Area -->
+            <div class="w-full bg-white rounded-xl shadow-md border-t-4 border-orange-500 p-3">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="flex gap-1" id="player-open-melds">
+                        ${renderOpenMelds(player.open)}
+                    </div>
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your Hand</span>
+                </div>
+                <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-center" id="vs-hand-container">
+                    ${player.closed.map((t, i) => renderTile(t, { 
+                        size: 'sm', 
+                        id: `vs-tile-${i}`,
+                        extraClasses: currentTurn === 'player' && !isGameOver && !pendingAction ? 'hover:-translate-y-2 cursor-pointer transition-transform' : 'opacity-50 cursor-default'
+                    })).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('vs-back-btn').addEventListener('click', () => {
+        if (confirm('Exit the current game?')) initApp();
+    });
+
+    const vsSettingsBtn = document.getElementById('vs-settings-btn');
+    if (vsSettingsBtn) {
+        vsSettingsBtn.addEventListener('click', () => {
+            showSettingsModal('AI對戰練習', false, true, false);
+        });
+    }
+
+    const vsRollbackBtn = document.getElementById('vs-rollback-btn');
+    if (vsRollbackBtn) {
+        vsRollbackBtn.addEventListener('click', () => {
+            rollbackVsMove();
+        });
+    }
+
+    const vsSeedBtn = document.getElementById('vs-seed-btn');
+    if (vsSeedBtn) {
+        vsSeedBtn.addEventListener('click', () => {
+            showSeedModal();
+        });
+    }
+    
+    document.getElementById('toggle-ai-hand-btn').addEventListener('click', () => {
+        vsGameState.showAiHand = !vsGameState.showAiHand;
+        renderVsArena();
+    });
+
+    if (isGameOver && document.getElementById('vs-restart-btn')) {
+        document.getElementById('vs-restart-btn').addEventListener('click', () => startVsMode());
+    }
+
+    // Action Center Button Handlers
+    if (pendingAction) {
+        document.getElementById('vs-skip-btn').addEventListener('click', () => {
+            vsGameState.pendingAction = null;
+            vsPlayerDraw();
+        });
+
+        document.querySelectorAll('.vs-action-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const type = e.currentTarget.dataset.type;
+                handleVsAction(type);
+            });
+        });
+    }
+
+    if (currentTurn === 'player' && !isGameOver && !pendingAction) {
+        player.closed.forEach((t, i) => {
+            const el = document.getElementById(`vs-tile-${i}`);
+            if (el) {
+                el.addEventListener('click', () => {
+                    vsPlayerDiscard(i);
+                });
+            }
+        });
+    }
+}
+
+
+function handleVsAction(type) {
+    const { pendingAction } = vsGameState;
+    const tile = pendingAction.tile;
+
+    saveVsSnapshot();
+
+    if (type === 'ron') {
+        vsGameState.isGameOver = true;
+        vsGameState.winner = 'player';
+        vsGameState.player.closed.push(tile);
+        vsGameState.trajectory.push({ actor: 'player', action: 'ron', tile });
+        vsGameState.pendingAction = null;
+        renderVsArena();
+    } else if (type === 'pon') {
+        // Remove 2 tiles from hand
+        vsGameState.player.closed.splice(vsGameState.player.closed.indexOf(tile), 1);
+        vsGameState.player.closed.splice(vsGameState.player.closed.indexOf(tile), 1);
+        vsGameState.player.open.push([tile, tile, tile]);
+        vsGameState.trajectory.push({ actor: 'player', action: 'pon', tile });
+        vsGameState.pendingAction = null;
+        vsGameState.currentTurn = 'player';
+        renderVsArena();
+        // Player must discard now
+    } else if (type === 'chi') {
+        const action = pendingAction.actions.find(a => a.type === 'chi');
+        if (action.options.length === 1) {
+            executeChi(action.options[0], tile);
+        } else {
+            showChiModal(action.options, tile);
+        }
+    }
+}
+
+function showChiModal(options, tile) {
+    let modalEl = document.getElementById('chi-modal-root');
+    if (!modalEl) {
+        modalEl = document.createElement('div');
+        modalEl.id = 'chi-modal-root';
+        document.body.appendChild(modalEl);
+    }
+
+    modalEl.innerHTML = `
+        <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div class="bg-white rounded-2xl w-full max-w-xs p-6 shadow-2xl">
+                <h3 class="font-bold text-gray-800 mb-4 text-center">Choose Chi Combination</h3>
+                <div class="flex flex-col gap-3">
+                    ${options.map((opt, i) => `
+                        <button class="chi-opt-btn flex items-center justify-center gap-2 p-3 border-2 border-gray-100 rounded-xl hover:border-mj-green hover:bg-emerald-50 transition" data-index="${i}">
+                            ${renderTile(opt[0], { size: 'xs' })}
+                            ${renderTile(tile, { size: 'xs', extraClasses: 'ring-2 ring-mj-green' })}
+                            ${renderTile(opt[1], { size: 'xs' })}
+                        </button>
+                    `).join('')}
+                </div>
+                <button id="close-chi-modal" class="w-full mt-4 text-gray-500 font-bold py-2">Cancel</button>
+            </div>
+        </div>
+    `;
+
+    document.querySelectorAll('.chi-opt-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = parseInt(e.currentTarget.dataset.index);
+            modalEl.innerHTML = '';
+            executeChi(options[index], tile);
+        });
+    });
+
+    document.getElementById('close-chi-modal').addEventListener('click', () => {
+        modalEl.innerHTML = '';
+    });
+}
+
+function executeChi(opt, tile) {
+    vsGameState.player.closed.splice(vsGameState.player.closed.indexOf(opt[0]), 1);
+    vsGameState.player.closed.splice(vsGameState.player.closed.indexOf(opt[1]), 1);
+    vsGameState.player.open.push(sortHand([...opt, tile]));
+    vsGameState.trajectory.push({ actor: 'player', action: 'chi', tile });
+    vsGameState.pendingAction = null;
+    vsGameState.currentTurn = 'player';
+    renderVsArena();
+}
+
+function vsPlayerDiscard(index) {
+    if (vsGameState.currentTurn !== 'player' || vsGameState.pendingAction) return;
+
+    saveVsSnapshot();
+
+    const tile = vsGameState.player.closed.splice(index, 1)[0];
+    vsGameState.player.river.push(tile);
+    vsGameState.latestDiscard = { owner: 'player', index: vsGameState.player.river.length - 1 };
+    vsGameState.player.closed = sortHand(vsGameState.player.closed);
+    vsGameState.trajectory.push({ actor: 'player', action: 'discard', tile: tile });
+
+    // Check if AI can steal
+    if (checkAiInterrupt(tile)) return;
+
+    vsGameState.currentTurn = 'ai';
+    renderVsArena();
+
+    // Check if Wall is empty
+    if (vsGameState.wall.length === 0) {
+        vsGameState.isGameOver = true;
+        vsGameState.winner = 'draw';
+        renderVsArena();
+        return;
+    }
+
+    // Trigger AI Turn
+    setTimeout(vsAiTurn, 1000);
+}
+
+function checkAiInterrupt(tile) {
+    // 1. Check AI Ron (Always Ron if possible, regardless of style)
+    if (isWinningHand([...vsGameState.ai.closed, tile], vsGameState.ai.open.length)) {
+        vsGameState.isGameOver = true;
+        vsGameState.winner = 'ai';
+        vsGameState.ai.closed.push(tile);
+        vsGameState.trajectory.push({ actor: 'ai', action: 'ron', tile: tile });
+        showAiActionBubble('食');
+        renderVsArena();
+        return true;
+    }
+
+    if (currentGameState.aiStyle === 'defensive') {
+        return false; // Defensive style NEVER calls Chi or Pon
+    }
+
+    // AI logic for Pon/Chi/Kan
+    const currentAnalysis = getDiscardAnalysis(vsGameState.ai.closed, vsGameState.ai.open.length);
+    const currentShanten = currentAnalysis.length > 0 ? currentAnalysis[0].shanten : calculateShanten(vsGameState.ai.closed, vsGameState.ai.open.length);
+
+    // Helper to evaluate if a call is worth it based on style
+    const evaluateCall = (tempHand, nextOpenCount) => {
+        const nextAnalysis = getDiscardAnalysis(tempHand, nextOpenCount);
+        if (nextAnalysis.length === 0) return false;
+        
+        const nextShanten = nextAnalysis[0].shanten;
+
+        if (currentGameState.aiStyle === 'aggressive') {
+            return nextShanten <= currentShanten;
+        } else {
+            return nextShanten < currentShanten;
+        }
+    };
+
+    // 2. Check AI Kan (Open)
+    const kanOption = getKanOptions(vsGameState.ai.closed, tile);
+    if (kanOption) {
+        const tempHand = vsGameState.ai.closed.filter(t => t !== tile);
+        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1)) {
+            vsGameState.ai.closed = sortHand(tempHand);
+            vsGameState.ai.open.push([tile, tile, tile, tile]);
+            vsGameState.trajectory.push({ actor: 'ai', action: 'kan', tile: tile });
+            vsGameState.latestDiscard = null;
+            vsGameState.currentTurn = 'ai';
+            vsDrawReplacement('ai');
+            return true;
+        }
+    }
+
+    // 3. Check AI Pon
+    const ponOption = getPonOptions(vsGameState.ai.closed, tile);
+    if (ponOption) {
+        const tempHand = [...vsGameState.ai.closed];
+        tempHand.splice(tempHand.indexOf(tile), 1);
+        tempHand.splice(tempHand.indexOf(tile), 1);
+        
+        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1)) {
+            // AI Ponds
+            vsGameState.ai.closed = sortHand(tempHand);
+            vsGameState.ai.open.push([tile, tile, tile]);
+            vsGameState.trajectory.push({ actor: 'ai', action: 'pon', tile: tile });
+            vsGameState.latestDiscard = null; // Clear latest discard since it was stolen
+            vsGameState.currentTurn = 'ai';
+            vsGameState.forbiddenDiscard = tile; // Rule: Cannot discard stolen tile same turn
+            showAiActionBubble('碰');
+            renderVsArena(); // Show the new meld immediately
+            vsAiDiscard(); // AI must discard after stealing
+            return true;
+        }
+    }
+
+    // 4. Check AI Chi (only because it's 1v1 and AI is always next)
+    const chiOptions = getChiOptions(vsGameState.ai.closed, tile);
+    for (let opt of chiOptions) {
+        const tempHand = [...vsGameState.ai.closed];
+        tempHand.splice(tempHand.indexOf(opt[0]), 1);
+        tempHand.splice(tempHand.indexOf(opt[1]), 1);
+        
+        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1)) {
+            // AI Chis
+            vsGameState.ai.closed = sortHand(tempHand);
+            vsGameState.ai.open.push(sortHand([...opt, tile]));
+            vsGameState.trajectory.push({ actor: 'ai', action: 'chi', tile: tile });
+            vsGameState.latestDiscard = null; // Clear latest discard since it was stolen
+            vsGameState.currentTurn = 'ai';
+            vsGameState.forbiddenDiscard = tile; // Rule: Cannot discard stolen tile same turn
+            showAiActionBubble('上');
+            renderVsArena(); // Show the new meld immediately
+            vsAiDiscard();
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function checkPlayerInterrupt(tile) {
+    const actions = [];
+
+    // 1. Check Ron
+    if (isWinningHand([...vsGameState.player.closed, tile], vsGameState.player.open.length)) {
+        actions.push({ type: 'ron', label: '食', tile });
+    }
+
+    // 2. Check Kan (Open)
+    if (getKanOptions(vsGameState.player.closed, tile)) {
+        actions.push({ type: 'kan', label: '槓', tile });
+    }
+
+    // 3. Check Pon
+    if (getPonOptions(vsGameState.player.closed, tile)) {
+        actions.push({ type: 'pon', label: '碰', tile });
+    }
+
+    // 4. Check Chi
+    const chiOptions = getChiOptions(vsGameState.player.closed, tile);
+    if (chiOptions.length > 0) {
+        actions.push({ type: 'chi', label: '上', tile, options: chiOptions });
+    }
+
+    if (actions.length > 0) {
+        vsGameState.pendingAction = { actions, tile };
+        renderVsArena();
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Internal helper for AI to run a quick MC simulation on a candidate discard.
+ * Returns a Promise that resolves to the win rate.
+ */
+function runMCEvaluation(hand, discard, runs, maxDraws, includeHonors) {
+    return new Promise((resolve) => {
+        const worker = new Worker('./src/js/engine/mcWorker.js', { type: 'module' });
+        worker.onmessage = function(e) {
+            if (e.data.success) {
+                resolve(e.data.stats.winRate);
+                worker.terminate();
+            } else if (e.data.error) {
+                resolve(0); // On error, treat as 0% win rate
+                worker.terminate();
+            }
+        };
+        worker.postMessage({ 
+            hand, 
+            discard, 
+            runs, 
+            maxDraws, 
+            includeHonors,
+            policy: 'greedy' 
+        });
+    });
+}
+
+async function vsAiDiscard() {
+    // Artificial delay for realism
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Rule: AI cannot discard the tile it just called (forbiddenDiscard)
+    const allowedClosedHand = vsGameState.ai.closed.filter(t => t !== vsGameState.forbiddenDiscard);
+    const analysis = getDiscardAnalysis(vsGameState.ai.closed, vsGameState.ai.open.length)
+        .filter(a => a.discard !== vsGameState.forbiddenDiscard);
+    
+    // reset forbidden discard after it has been used to filter this turn
+    vsGameState.forbiddenDiscard = null;
+
+    if (analysis.length === 0 && allowedClosedHand.length === 0) {
+        // Fallback in case every single tile is somehow forbidden (should be impossible in Mahjong)
+        const fallbackMove = vsGameState.ai.closed[0];
+        executeAiDiscard(fallbackMove);
+        return;
+    }
+
+    let bestMove;
+    const handSizeAfterDiscard = vsGameState.ai.closed.length - 1;
+
+    if (currentGameState.aiDifficulty === 'expert' && (handSizeAfterDiscard === 8 || handSizeAfterDiscard <= 5)) {
+        // --- Expert internal Monte Carlo logic ---
+        const iterations = handSizeAfterDiscard === 8 ? 100 : 1000;
+        const maxDraws = 3;
+        
+        // Consider only top 3 candidates from filtered analysis
+        const candidates = analysis.slice(0, Math.min(3, analysis.length));
+        
+        if (candidates.length > 1) {
+            // Evaluate each candidate in parallel
+            const evaluations = await Promise.all(candidates.map(c => 
+                runMCEvaluation(vsGameState.ai.closed, c.discard, iterations, maxDraws, true)
+            ));
+            
+            // Find candidate with highest win rate
+            let maxWinRate = -1;
+            let bestCandidateIdx = 0;
+            evaluations.forEach((rate, idx) => {
+                if (rate > maxWinRate) {
+                    maxWinRate = rate;
+                    bestCandidateIdx = idx;
+                }
+            });
+            bestMove = candidates[bestCandidateIdx].discard;
+        } else {
+            bestMove = candidates[0].discard;
+        }
+    } else if (currentGameState.aiDifficulty === 'random') {
+        // Pick a completely random tile from ALLOWED hand
+        bestMove = allowedClosedHand[Math.floor(Math.random() * allowedClosedHand.length)];
+    } else if (currentGameState.aiDifficulty === 'beginner') {
+        // Pick from the top 3 optimal discards (already filtered)
+        const topMoves = analysis.slice(0, Math.min(3, analysis.length));
+        bestMove = topMoves[Math.floor(Math.random() * topMoves.length)].discard;
+    } else {
+        // Expert (Standard): Always pick the absolute best move from DP (already filtered)
+        bestMove = analysis[0].discard;
+    }
+
+    executeAiDiscard(bestMove);
+}
+
+function executeAiDiscard(bestMove) {
+    const discardIndex = vsGameState.ai.closed.indexOf(bestMove);
+    vsGameState.ai.closed.splice(discardIndex, 1);
+    vsGameState.ai.river.push(bestMove);
+    vsGameState.latestDiscard = { owner: 'ai', index: vsGameState.ai.river.length - 1 };
+    vsGameState.ai.closed = sortHand(vsGameState.ai.closed);
+    vsGameState.trajectory.push({ actor: 'ai', action: 'discard', tile: bestMove });
+
+    // After AI discards, check if Player can steal
+    if (checkPlayerInterrupt(bestMove)) return;
+
+    // Transition back to Player draw
+    vsPlayerDraw();
+}
+
+function vsPlayerDraw() {
+    if (vsGameState.wall.length === 0) {
+        vsGameState.isGameOver = true;
+        vsGameState.winner = 'draw';
+        renderVsArena();
+        return;
+    }
+
+    vsGameState.currentTurn = 'player';
+    const playerTile = vsGameState.wall.shift();
+    vsGameState.player.closed.push(playerTile);
+    vsGameState.trajectory.push({ actor: 'player', action: 'draw', tile: playerTile });
+
+    if (isWinningHand(vsGameState.player.closed, vsGameState.player.open.length)) {
+        vsGameState.isGameOver = true;
+        vsGameState.winner = 'player';
+    }
+    renderVsArena();
+}
+
+function vsAiTurn() {
+    if (vsGameState.isGameOver) return;
+
+    // 1. Draw
+    const tile = vsGameState.wall.shift();
+    vsGameState.ai.closed.push(tile);
+    vsGameState.trajectory.push({ actor: 'ai', action: 'draw', tile: tile });
+
+    // 2. Check for AI win (Tsumo)
+    if (isWinningHand(vsGameState.ai.closed, vsGameState.ai.open.length)) {
+        vsGameState.isGameOver = true;
+        vsGameState.winner = 'ai';
+        showAiActionBubble('自摸');
+        renderVsArena();
+        return;
+    }
+
+    // 3. AI Discards
+    vsAiDiscard();
+}
+
+
+function showSeedModal() {
+    let modalEl = document.getElementById('seed-modal-root');
+    if (!modalEl) {
+        modalEl = document.createElement('div');
+        modalEl.id = 'seed-modal-root';
+        document.body.appendChild(modalEl);
+    }
+
+    modalEl.innerHTML = `
+        <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div class="bg-white rounded-2xl w-full max-w-xs p-6 shadow-2xl animate-fade-in-up">
+                <h3 class="font-bold text-gray-800 mb-2 text-center text-lg">Match Seed</h3>
+                <p class="text-xs text-gray-500 mb-4 text-center">Enter a custom seed to replay a specific match.</p>
+                
+                <input type="number" id="seed-input" 
+                    class="w-full border-2 border-gray-100 rounded-xl px-4 py-3 text-center font-mono text-xl focus:border-purple-500 focus:outline-none transition-colors mb-4"
+                    placeholder="e.g. 123456" value="${vsGameState.currentSeed}">
+                
+                <div class="flex gap-2">
+                    <button id="close-seed-modal" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl transition">
+                        Cancel
+                    </button>
+                    <button id="apply-seed-btn" class="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-xl shadow-md transition active:scale-95">
+                        Apply
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('close-seed-modal').addEventListener('click', () => {
+        modalEl.innerHTML = '';
+    });
+
+    document.getElementById('apply-seed-btn').addEventListener('click', () => {
+        const input = document.getElementById('seed-input');
+        const val = parseInt(input.value);
+        if (!isNaN(val)) {
+            modalEl.innerHTML = '';
+            startVsMode(val);
+        } else {
+            alert('Please enter a valid numeric seed.');
+        }
+    });
+}
+
+function rollbackVsMove() {
+    if (vsGameState.historyStack.length === 0) return;
+    
+    // Restore the last snapshot
+    const lastState = vsGameState.historyStack.pop();
+    
+    // Assign everything back
+    vsGameState.wall = lastState.wall;
+    vsGameState.player = lastState.player;
+    vsGameState.ai = lastState.ai;
+    vsGameState.currentTurn = lastState.currentTurn;
+    vsGameState.pendingAction = lastState.pendingAction;
+    vsGameState.trajectory = lastState.trajectory;
+    vsGameState.isGameOver = lastState.isGameOver;
+    vsGameState.winner = lastState.winner;
+    vsGameState.showAiHand = lastState.showAiHand;
+    vsGameState.latestDiscard = lastState.latestDiscard;
+    vsGameState.currentSeed = lastState.currentSeed;
+    
+    renderVsArena();
+}
+

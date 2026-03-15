@@ -27,10 +27,15 @@
                         'fade-in-up': {
                             '0%': { opacity: '0', transform: 'translateY(10px)' },
                             '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        'slide-down': {
+                            '0%': { opacity: '0', transform: 'translateY(-20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
                         }
                     },
                     animation: {
                         'fade-in-up': 'fade-in-up 0.3s ease-out',
+                        'slide-down': 'slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
                     }
                 }
             }
@@ -76,6 +81,9 @@
             <p class="text-lg text-gray-500 animate-pulse">Loading Trainer...</p>
         </div>
     </main>
+
+    <!-- AI Action Notifications (Persistent Container) -->
+    <div id="vs-notification-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] pointer-events-none"></div>
 
     <!-- Update Toast (Hidden by default) -->
     <div id="update-toast" class="fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 transform translate-y-20 opacity-0 transition-all duration-300 z-50 pointer-events-none">
