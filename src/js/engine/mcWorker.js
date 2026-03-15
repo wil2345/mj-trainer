@@ -25,7 +25,8 @@ function sortMahjongHand(hand) {
 }
 
 self.onmessage = function(e) {
-    const { hand, discard, runs, maxDraws, includeHonors } = e.data;
+    const { hand, discard, runs, maxDraws, includeHonors, policy } = e.data;
+    const isRandomPolicy = policy === 'random';
     
     // Validate inputs
     if (!hand || !discard) {
@@ -67,6 +68,7 @@ self.onmessage = function(e) {
     let finalHands = {}; // To track top final forms
     
     // Cache optimal moves for specific hand states to bypass heavy DP calculations
+    // Only used for greedy policy
     const stateCache = {}; 
     
     // 2. Run simulation loop
@@ -101,22 +103,28 @@ self.onmessage = function(e) {
             // Not a win, we must discard
             let discardTile;
             
-            // Check if we've already calculated the optimal move for this exact hand shape
-            if (stateCache[stateKey]) {
-                discardTile = stateCache[stateKey];
+            if (isRandomPolicy) {
+                // Random Policy: Just pick any random tile from the hand to discard
+                discardTile = simHand[Math.floor(Math.random() * simHand.length)];
             } else {
-                const analysis = getDiscardAnalysis(simHand);
-                // Analysis is sorted by shanten ascending, then acceptance descending
-                const bestShanten = analysis[0].shanten;
-                const bestAcceptance = analysis[0].acceptance;
-                
-                const optimalMoves = analysis.filter(a => a.shanten === bestShanten && a.acceptance === bestAcceptance);
-                
-                // Pick a random optimal move
-                discardTile = optimalMoves[Math.floor(Math.random() * optimalMoves.length)].discard;
-                
-                // Save to cache for future runs
-                stateCache[stateKey] = discardTile;
+                // Greedy Policy
+                // Check if we've already calculated the optimal move for this exact hand shape
+                if (stateCache[stateKey]) {
+                    discardTile = stateCache[stateKey];
+                } else {
+                    const analysis = getDiscardAnalysis(simHand);
+                    // Analysis is sorted by shanten ascending, then acceptance descending
+                    const bestShanten = analysis[0].shanten;
+                    const bestAcceptance = analysis[0].acceptance;
+                    
+                    const optimalMoves = analysis.filter(a => a.shanten === bestShanten && a.acceptance === bestAcceptance);
+                    
+                    // Pick a random optimal move
+                    discardTile = optimalMoves[Math.floor(Math.random() * optimalMoves.length)].discard;
+                    
+                    // Save to cache for future runs
+                    stateCache[stateKey] = discardTile;
+                }
             }
             
             // Remove the discarded tile
@@ -140,8 +148,8 @@ self.onmessage = function(e) {
             finalHands[stateKey] = (finalHands[stateKey] || 0) + 1;
         }
 
-        // Report progress every 5% or minimum every 100 runs
-        const reportInterval = Math.max(100, Math.floor(runs / 20));
+        // Report progress every 5% or minimum every 10 runs (for small batches)
+        const reportInterval = Math.max(10, Math.floor(runs / 20));
         if (run % reportInterval === 0 && run > 0) {
             self.postMessage({
                 progress: true,

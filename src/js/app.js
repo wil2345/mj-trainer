@@ -23,6 +23,7 @@ let currentGameState = {
     enableMC: false,
     mcDraws: 5,
     mcRuns: 1000,
+    mcPolicy: 'greedy', // 'greedy' (最大機率) or 'random' (隨機)
     isMCRunning: false,
     mcCache: {}
 };
@@ -181,7 +182,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.2.1</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.2.3</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -304,7 +305,7 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
     let tempMCRuns = currentGameState.mcRuns || 1000;
     
     const activeColorClass = isMCMode ? 'bg-purple-500' : (isCalculator ? 'bg-blue-500' : 'bg-mj-green');
-    const sizes = isMCMode ? [3, 5, 8] : [5, 8, 11, 14, 17];
+    const sizes = [5, 8, 11, 14, 17]; // Allow all sizes for MC mode now
     
     // Ensure current size is valid for the mode
     if (!sizes.includes(tempSize)) {
@@ -361,6 +362,13 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
                     <div>
                         <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Simulation Settings</p>
                         <div class="grid grid-cols-2 gap-3 border border-gray-100 dark:border-gray-700 rounded-xl p-3 bg-gray-50/50 dark:bg-gray-800/50">
+                            <div class="flex flex-col col-span-2 sm:col-span-1">
+                                <label class="text-[11px] font-bold text-gray-400 mb-1">Bot Policy</label>
+                                <select id="mc-policy-select" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-purple-500">
+                                    <option value="greedy" ${currentGameState.mcPolicy === 'greedy' ? 'selected' : ''}>最大機率 (Greedy)</option>
+                                    <option value="random" ${currentGameState.mcPolicy === 'random' ? 'selected' : ''}>隨機 (Random)</option>
+                                </select>
+                            </div>
                             <div class="flex flex-col">
                                 <label class="text-[11px] font-bold text-gray-400 mb-1">Max Draws</label>
                                 <select id="mc-draws-select" class="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-1.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:border-purple-500">
@@ -541,6 +549,12 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
     }
 
     document.getElementById('apply-settings').addEventListener('click', () => {
+        const handNeedsReset = currentGameState.selectedHandSize !== tempSize || currentGameState.includeHonors !== tempHonors;
+        const mcParamsChanged = 
+            currentGameState.mcDraws !== tempMCDraws || 
+            currentGameState.mcRuns !== tempMCRuns ||
+            (isMCMode && currentGameState.mcPolicy !== document.getElementById('mc-policy-select').value);
+
         currentGameState.selectedHandSize = tempSize;
         currentGameState.includeHonors = tempHonors;
         currentGameState.recordTime = tempRecordTime;
@@ -549,10 +563,17 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
         if (isMCMode) {
             currentGameState.mcDraws = tempMCDraws;
             currentGameState.mcRuns = tempMCRuns;
+            currentGameState.mcPolicy = document.getElementById('mc-policy-select').value;
         }
+
+        // Clear MC cache if any simulation parameters changed
+        if (handNeedsReset || mcParamsChanged) {
+            currentGameState.mcCache = {};
+        }
+
         modalEl.innerHTML = '';
         
-        if (isUpdate) {
+        if (isUpdate && handNeedsReset) {
             currentGameState.hand = [];
         }
         
@@ -646,10 +667,11 @@ function renderGameScene() {
                     ` : ''}
                     
                     ${isCalculator && !isMC && hand.length <= 8 ? `
-                        <button id="header-to-mc-btn" class="bg-purple-50 text-purple-600 hover:text-purple-800 border border-purple-100 p-1.5 rounded-lg transition flex items-center justify-center shadow-sm" title="Run Monte Carlo Simulation">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <button id="header-to-mc-btn" class="bg-purple-50 text-purple-600 hover:text-purple-800 border border-purple-100 px-2 py-1.5 rounded-lg transition flex items-center gap-1 shadow-sm font-bold text-[10px] whitespace-nowrap" title="Run Monte Carlo Simulation">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                             </svg>
+                            <span class="hidden sm:inline">Monte Carlo</span>
                         </button>
                     ` : ''}
 
@@ -772,7 +794,9 @@ function renderGameScene() {
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => {
                 currentGameState.hand = []; // Force new hand gen
-                startTrainingSession('進張計算機', true);
+                currentGameState.mcCache = {}; // clear cache for safety
+                // Restart with the exact current mode we are already in
+                startTrainingSession(currentGameState.mode, true, currentGameState.isMCMode);
             });
         }
         
@@ -822,8 +846,8 @@ function renderGameScene() {
 
 function renderEditScene(appContainer) {
     const { hand, isMCMode } = currentGameState;
-    const maxTiles = isMCMode ? 8 : 17;
-    const validSizes = isMCMode ? [3, 5, 8] : [5, 8, 11, 14, 17];
+    const maxTiles = 17;
+    const validSizes = [5, 8, 11, 14, 17];
 
     // Render current hand (clickable to remove)
     const handHtml = hand.map((tile, index) => 
@@ -891,7 +915,7 @@ function renderEditScene(appContainer) {
     allTilesFlat.forEach(tileCode => {
         document.getElementById(`key-${tileCode}`).addEventListener('click', () => {
             if (currentGameState.hand.length >= maxTiles) {
-                alert(`Cannot exceed ${maxTiles} tiles in this mode.`);
+                alert(`Cannot exceed ${maxTiles} tiles.`);
                 return;
             }
             const countInHand = currentGameState.hand.filter(t => t === tileCode).length;
@@ -1113,6 +1137,24 @@ function renderHistoryScene() {
     }
 }
 
+function getMCLoaderHtml(runs, draws) {
+    return `
+        <div class="flex flex-col items-center gap-2 w-full max-w-[200px] mb-2">
+            <div class="flex items-center gap-2 text-gray-500">
+                <svg class="animate-spin h-4 w-4 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span id="mc-progress-text" class="text-xs font-bold uppercase tracking-wider">Running Monte Carlo... 0%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-1.5 dark:bg-gray-700 overflow-hidden">
+                <div id="mc-progress-bar" class="bg-purple-500 h-1.5 rounded-full transition-all duration-150 ease-out" style="width: 0%"></div>
+            </div>
+        </div>
+        <p class="text-[10px] text-gray-400">Simulating ${runs} runs of ${draws} draws</p>
+    `;
+}
+
 function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator, tile, index) {
     // Acceptance Tiles HTML
     const acceptanceHtml = userMove.acceptedTiles.map(item => `
@@ -1200,7 +1242,7 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                     ${acceptanceHtml || '<p class="text-xs text-gray-400">No tiles improve this hand</p>'}
                 </div>
                 
-                ${currentGameState.enableMC && currentGameState.hand.length <= 8 ? `
+                ${currentGameState.enableMC ? `
                     <div id="mc-results-container" class="mt-4 pt-4 border-t border-gray-100 flex flex-col items-center w-full min-h-[100px]">
                         <div class="flex flex-col items-center gap-2 w-full max-w-[200px] mb-2">
                             <div class="flex items-center gap-2 text-gray-500">
@@ -1224,7 +1266,7 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
         document.querySelectorAll('.tile-container').forEach(el => el.classList.remove('scale-110', 'brightness-110', 'translate-y-[-8px]', 'z-10'));
         document.getElementById(`tile-${index}`).classList.add('scale-110', 'brightness-110', 'translate-y-[-8px]', 'z-10');
 
-        if (currentGameState.enableMC && currentGameState.hand.length <= 8) {
+        if (currentGameState.enableMC) {
             runMonteCarlo(currentGameState.hand, tile, currentGameState.mcRuns, currentGameState.mcDraws, currentGameState.includeHonors);
         }
 
@@ -1377,7 +1419,14 @@ function getMCResultsHtml(stats) {
     return `
         <div class="w-full animate-fade-in-up">
             <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center justify-between">
-                <span>Simulation Results</span>
+                <div class="flex items-center gap-2">
+                    <span>Simulation Results</span>
+                    <button id="mc-rerun-btn" class="p-1 hover:bg-gray-200 rounded-full transition text-gray-400 hover:text-purple-600" title="Rerun Simulation">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+                </div>
                 <span class="text-[10px] font-normal text-gray-400 normal-case bg-gray-100 px-1.5 py-0.5 rounded">${doneRuns} runs, limit ${doneMax} draws</span>
             </h4>
             
@@ -1416,11 +1465,31 @@ function runMonteCarlo(hand, discard, totalRuns, maxDraws, includeHonors) {
         activeMCWorkers = [];
     }
     
+    const bindRerun = () => {
+        const rerunBtn = document.getElementById('mc-rerun-btn');
+        if (rerunBtn) {
+            rerunBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // Clear cache for this specific discard before rerunning
+                if (currentGameState.mcCache) delete currentGameState.mcCache[discard];
+                
+                // Show loader immediately
+                const mcContainer = document.getElementById('mc-results-container');
+                if (mcContainer) {
+                    mcContainer.innerHTML = getMCLoaderHtml(totalRuns, maxDraws);
+                }
+                
+                runMonteCarlo(hand, discard, totalRuns, maxDraws, includeHonors);
+            });
+        }
+    };
+
     // Check Cache first
     if (currentGameState.mcCache && currentGameState.mcCache[discard]) {
         const mcContainer = document.getElementById('mc-results-container');
         if (mcContainer) {
             mcContainer.innerHTML = getMCResultsHtml(currentGameState.mcCache[discard]);
+            bindRerun();
         }
         return;
     }
@@ -1546,11 +1615,19 @@ function runMonteCarlo(hand, discard, totalRuns, maxDraws, includeHonors) {
                 
                 if (mcContainer) {
                     mcContainer.innerHTML = getMCResultsHtml(finalStats);
+                    bindRerun();
                 }
             }
         };
         
         // Start worker
-        worker.postMessage({ hand, discard, runs: workerRuns, maxDraws, includeHonors });
+        worker.postMessage({ 
+            hand, 
+            discard, 
+            runs: workerRuns, 
+            maxDraws, 
+            includeHonors,
+            policy: currentGameState.mcPolicy 
+        });
     }
 }
