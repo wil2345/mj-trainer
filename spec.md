@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.4.0)
+# Taiwan Mahjong Trainer - Project Specification (v1.4.1)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
@@ -55,7 +55,7 @@ Beyond isolated efficiency training, the app features a full 1-on-1 AI Arena to 
 *   **AI Settings:**
     *   **Difficulty (難度):** Expert (Perfect efficiency), Beginner (Suboptimal moves), Random (Random discards).
     *   **Play Style (打法風格):** Aggressive (Calls to improve hand), Balanced (Calls to improve hand), Defensive (Calls only if discard is 100% safe).
-    *   **Show AI State (顯示AI叫糊狀態):** Toggles dynamic badges showing the AI's exact Shanten count (X向聽) or a pulsing red "聽牌" badge when waiting. Hides automatically upon game over.
+    *   **Show AI State (顯示AI叫糊狀態):** Toggles dynamic badges showing the AI's exact Shanten count (X向聽) or a pulsing red "叫糊" badge when waiting. Hides automatically upon game over.
     *   **AI Speed Mode (極速AI模式):** Toggles between a 1-second "human-like" delay for AI actions (default) or instant execution (0ms) for speed training.
 *   **Advanced Features:**
     *   **Strict Improvement Rule:** The AI will never make a "sideways" call (like kuikae) that locks its hand without mathematical benefit. A call MUST lower Shanten OR increase total tile acceptance.

@@ -186,7 +186,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.4.0</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.4.1</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -1257,7 +1257,7 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                         <div class="text-center min-w-[60px]">
                             <p class="text-[10px] text-gray-500 font-bold mb-0.5">狀態</p>
                             <p class="text-xl font-black tracking-tight ${userMove.shanten === 0 ? 'text-mj-red' : 'text-blue-600'}">
-                                ${userMove.shanten === 0 ? '聽牌' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">向聽</span>`}
+                                ${userMove.shanten === 0 ? '叫糊' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">向聽</span>`}
                             </p>
                         </div>
                         <div class="w-px h-8 bg-gray-300 rounded"></div>
@@ -1318,7 +1318,7 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                         <div class="text-center min-w-[60px]">
                             <p class="text-[10px] text-gray-500 font-bold mb-0.5">狀態</p>
                             <p class="text-xl font-black tracking-tight ${userMove.shanten === 0 ? 'text-mj-red' : 'text-blue-600'}">
-                                ${userMove.shanten === 0 ? '聽牌' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">向聽</span>`}
+                                ${userMove.shanten === 0 ? '叫糊' : `${userMove.shanten}<span class="text-xs font-bold ml-0.5 text-gray-600">向聽</span>`}
                             </p>
                         </div>
                         <div class="w-px h-8 bg-gray-300 rounded"></div>
@@ -1351,7 +1351,7 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                                 <div class="text-center min-w-[60px]">
                                     <p class="text-[10px] text-emerald-600 font-bold mb-0.5">狀態</p>
                                     <p class="text-xl font-black tracking-tight ${bestMove.shanten === 0 ? 'text-mj-red' : 'text-emerald-700'}">
-                                        ${bestMove.shanten === 0 ? '聽牌' : `${bestMove.shanten}<span class="text-xs font-bold ml-0.5 text-emerald-600">向聽</span>`}
+                                        ${bestMove.shanten === 0 ? '叫糊' : `${bestMove.shanten}<span class="text-xs font-bold ml-0.5 text-emerald-600">向聽</span>`}
                                     </p>
                                 </div>
                                 <div class="w-px h-8 bg-emerald-200 rounded"></div>
@@ -1417,7 +1417,7 @@ function getMCResultsHtml(stats) {
         if (item.shanten === -1) {
             shantenBadge = '<span class="bg-yellow-400 text-white text-[11px] font-black px-2 py-1 rounded shadow-sm whitespace-nowrap">胡牌</span>';
         } else if (item.shanten === 0) {
-            shantenBadge = '<span class="bg-red-500 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">聽牌</span>';
+            shantenBadge = '<span class="bg-red-500 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">叫糊</span>';
         } else {
             shantenBadge = `<span class="bg-gray-400 text-white text-[11px] font-bold px-2 py-1 rounded shadow-sm whitespace-nowrap">${item.shanten}向聽</span>`;
         }
@@ -1885,7 +1885,7 @@ function renderVsArena() {
                         <div class="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-[10px] font-bold">AI</div>
                         ${(currentGameState.showAiTenpai && !isGameOver) ? (
                             aiShanten === 0 
-                            ? '<span class="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded animate-pulse shadow-sm">聽牌</span>' 
+                            ? '<span class="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded animate-pulse shadow-sm">叫糊</span>' 
                             : `<span class="bg-gray-400 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm">${aiShanten}向聽</span>`
                         ) : ''}
                     </div>
