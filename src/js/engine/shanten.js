@@ -410,20 +410,27 @@ export const isWinningHand = (hand, openMeldsCount = 0) => {
 };
 
 /**
- * For a 17-tile hand, find all possible discards and their resulting tile acceptance.
+ * For a hand, find all possible discards and their resulting tile acceptance.
+ * @param {string[]} hand - The closed hand array
+ * @param {number} openMeldsCount - Number of melds already opened
+ * @param {string[]} deadTiles - Optional: Array of tiles already visible on board (rivers/open melds)
  */
-export const getDiscardAnalysis = (hand, openMeldsCount = 0) => {
+export const getDiscardAnalysis = (hand, openMeldsCount = 0, deadTiles = []) => {
     dpMemo.clear(); // Clear cache at the start of a new analysis run to save memory
     
     const analysis = [];
     const uniqueTiles = [...new Set(hand)];
     
-    // Count current occurrences to prevent drawing > 4 of a tile
-    // Note: In a real game, we'd also need to subtract open melds and discards.
-    // But for "Efficiency Trainer" logic, we assume the deck still has 4 minus what is in our hand.
+    // Count occurrences in hand
     const initialCounts = {};
     hand.forEach(tile => {
         initialCounts[tile] = (initialCounts[tile] || 0) + 1;
+    });
+
+    // Count occurrences in deadTiles
+    const deadCounts = {};
+    deadTiles.forEach(tile => {
+        deadCounts[tile] = (deadCounts[tile] || 0) + 1;
     });
     
     uniqueTiles.forEach(discard => {
@@ -438,17 +445,19 @@ export const getDiscardAnalysis = (hand, openMeldsCount = 0) => {
         let acceptanceCount = 0;
         const acceptedTiles = [];
 
-        // We only need to check the 34 unique tile types, not the 136 full deck.
+        // We only need to check the 34 unique tile types
         const UNIQUE_TILE_TYPES = Object.keys(TILE_NAMES);
 
         UNIQUE_TILE_TYPES.forEach(tile => {
             const countInHand = initialCounts[tile] || 0;
-            const nextHand = [...tempHand, tile];
+            const countInDead = deadCounts[tile] || 0;
+            const totalVisible = countInHand + countInDead;
             
-            if (countInHand >= 4) return;
+            if (totalVisible >= 4) return;
 
+            const nextHand = [...tempHand, tile];
             if (calculateShanten(nextHand, openMeldsCount) < currentShanten) {
-                const remaining = 4 - countInHand;
+                const remaining = 4 - totalVisible;
                 acceptanceCount += remaining;
                 acceptedTiles.push({ tile, count: remaining });
             }

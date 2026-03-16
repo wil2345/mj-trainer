@@ -2217,21 +2217,33 @@ function checkAiInterrupt(tile) {
         }
     });
 
-    // Gather all tiles explicitly discarded by the player (river + tiles the AI stole)
-    const playerDiscards = [...vsGameState.player.river];
-    vsGameState.ai.open.forEach(meld => {
-        if (Array.isArray(meld)) {
-            // Arrays represent open melds (Chi/Pon/Daiminkan/Kakan).
-            // For Chi, we format it as [left, stolen, right]. For others, all tiles are identical.
-            // So index 1 is ALWAYS the tile stolen from the player!
-            playerDiscards.push(meld[1]);
-        }
-    });
+    // Gather all tiles explicitly visible on board (dead tiles)
+    const deadTiles = [];
+    deadTiles.push(...vsGameState.player.river);
+    deadTiles.push(...vsGameState.ai.river);
+    
+    const extractOpenTiles = (openMelds, isAi) => {
+        let tiles = [];
+        openMelds.forEach(meld => {
+            if (Array.isArray(meld)) {
+                tiles.push(...meld);
+            } else if (meld.tiles) {
+                // For Ankan: AI knows its own Ankan, but only counts if game over or showAiHand
+                if (isAi || !meld.isClosed || vsGameState.showAiHand || vsGameState.isGameOver) {
+                    tiles.push(...meld.tiles);
+                }
+            }
+        });
+        return tiles;
+    };
+    
+    deadTiles.push(...extractOpenTiles(vsGameState.player.open, false));
+    deadTiles.push(...extractOpenTiles(vsGameState.ai.open, true));
 
     // Helper to evaluate if a call is worth it based on style
     const evaluateCall = (tempHand, nextOpenCount) => {
         // Filter out the stolen tile from the hypothetical analysis since it will be forbidden
-        const nextAnalysisRaw = getDiscardAnalysis(tempHand, nextOpenCount);
+        const nextAnalysisRaw = getDiscardAnalysis(tempHand, nextOpenCount, deadTiles);
         const nextAnalysis = nextAnalysisRaw.filter(a => a.discard !== tile);
         
         if (nextAnalysis.length === 0) return false;
@@ -2247,9 +2259,12 @@ function checkAiInterrupt(tile) {
         if (currentGameState.aiStyle === 'defensive') {
             // Defensive AI ONLY makes a call if it can discard a 100% safe tile (already in player's river or stolen from player)
             // It will not make a call if it forces it to discard an unseen/dangerous tile, even if the call lowers Shanten.
+            const playerRiverPlusStolen = [...vsGameState.player.river];
+            vsGameState.ai.open.forEach(m => { if (Array.isArray(m)) playerRiverPlusStolen.push(m[1]); });
+
             const hasSafeDiscard = nextAnalysis.some(a => 
                 a.shanten === nextShanten && 
-                playerDiscards.includes(a.discard)
+                playerRiverPlusStolen.includes(a.discard)
             );
             return hasSafeDiscard;
         }
@@ -2390,26 +2405,44 @@ function runMCEvaluation(hand, discard, runs, maxDraws, includeHonors, deadTiles
 async function vsAiDiscard() {
     // Rule: AI cannot discard the tile it just called (forbiddenDiscard)
     const allowedClosedHand = vsGameState.ai.closed.filter(t => t !== vsGameState.forbiddenDiscard);
-    const analysis = getDiscardAnalysis(vsGameState.ai.closed, vsGameState.ai.open.length)
+    
+    // Collect all visible 'dead' tiles for context-aware analysis
+    let deadTiles = [];
+    deadTiles.push(...vsGameState.player.river);
+    deadTiles.push(...vsGameState.ai.river);
+    
+    const extractOpenTiles = (openMelds, isAi) => {
+        let tiles = [];
+        openMelds.forEach(meld => {
+            if (Array.isArray(meld)) {
+                tiles.push(...meld);
+            } else if (meld.tiles) {
+                if (isAi || !meld.isClosed || vsGameState.showAiHand || vsGameState.isGameOver) {
+                    tiles.push(...meld.tiles);
+                }
+            }
+        });
+        return tiles;
+    };
+    deadTiles.push(...extractOpenTiles(vsGameState.player.open, false));
+    deadTiles.push(...extractOpenTiles(vsGameState.ai.open, true));
+
+    const analysis = getDiscardAnalysis(vsGameState.ai.closed, vsGameState.ai.open.length, deadTiles)
         .filter(a => a.discard !== vsGameState.forbiddenDiscard);
     
     // reset forbidden discard after it has been used to filter this turn
     vsGameState.forbiddenDiscard = null;
 
     if (currentGameState.aiStyle === 'defensive') {
-        // Gather all tiles explicitly discarded by the player (river + tiles the AI stole)
-        const playerDiscards = [...vsGameState.player.river];
-        vsGameState.ai.open.forEach(meld => {
-            if (Array.isArray(meld)) {
-                playerDiscards.push(meld[1]); // Index 1 is always the stolen tile
-            }
-        });
+        // Gathering player discards specifically for safety logic
+        const playerRiverPlusStolen = [...vsGameState.player.river];
+        vsGameState.ai.open.forEach(m => { if (Array.isArray(m)) playerRiverPlusStolen.push(m[1]); });
 
         // Defensive AI prioritizes safe discards within the same Shanten level
         analysis.sort((a, b) => {
             if (a.shanten !== b.shanten) return a.shanten - b.shanten;
-            const aSafe = playerDiscards.includes(a.discard);
-            const bSafe = playerDiscards.includes(b.discard);
+            const aSafe = playerRiverPlusStolen.includes(a.discard);
+            const bSafe = playerRiverPlusStolen.includes(b.discard);
             if (aSafe && !bSafe) return -1;
             if (!aSafe && bSafe) return 1;
             return b.acceptance - a.acceptance;
@@ -2417,7 +2450,6 @@ async function vsAiDiscard() {
     }
 
     if (analysis.length === 0 && allowedClosedHand.length === 0) {
-        // Fallback in case every single tile is somehow forbidden (should be impossible in Mahjong)
         const fallbackMove = vsGameState.ai.closed[0];
         executeAiDiscard(fallbackMove);
         return;
@@ -2431,39 +2463,15 @@ async function vsAiDiscard() {
         const iterations = handSizeAfterDiscard === 8 ? 100 : 1000;
         const maxDraws = 5;
         
-        // Collect all known/dead tiles on the board
-        let deadTiles = [];
-        deadTiles.push(...vsGameState.player.river);
-        deadTiles.push(...vsGameState.ai.river);
-        
-        // Helper to extract tiles from open melds, respecting Ankan hidden state
-        const extractOpenTiles = (openMelds, isAi) => {
-            let tiles = [];
-            openMelds.forEach(meld => {
-                if (Array.isArray(meld)) {
-                    // Regular Chi/Pon/Daiminkan
-                    tiles.push(...meld);
-                } else if (meld.tiles) {
-                    // It's an Ankan. AI only knows the tiles if it's the AI's own Ankan!
-                    if (isAi || !meld.isClosed) {
-                        tiles.push(...meld.tiles);
-                    }
-                }
-            });
-            return tiles;
-        };
-        
-        deadTiles.push(...extractOpenTiles(vsGameState.player.open, false));
-        deadTiles.push(...extractOpenTiles(vsGameState.ai.open, true));
-
         // Filter candidates: ONLY evaluate moves that maintain the absolute best possible Shanten for this hand state.
-        // We do not want the MC engine stepping backwards in Shanten (e.g., from 1 Shanten to 2 Shanten).
         const bestPossibleShanten = analysis[0].shanten;
         let topTierCandidates = analysis.filter(a => a.shanten === bestPossibleShanten);
 
         if (currentGameState.aiStyle === 'defensive') {
-            // If defensive, the MC engine should ONLY simulate safe tiles if they exist at this Shanten level.
-            const safeCandidates = topTierCandidates.filter(a => vsGameState.player.river.includes(a.discard));
+            const playerRiverPlusStolen = [...vsGameState.player.river];
+            vsGameState.ai.open.forEach(m => { if (Array.isArray(m)) playerRiverPlusStolen.push(m[1]); });
+            
+            const safeCandidates = topTierCandidates.filter(a => playerRiverPlusStolen.includes(a.discard));
             if (safeCandidates.length > 0) {
                 topTierCandidates = safeCandidates;
             }
@@ -2492,14 +2500,11 @@ async function vsAiDiscard() {
             bestMove = candidates[0].discard;
         }
     } else if (currentGameState.aiDifficulty === 'random') {
-        // Pick a completely random tile from ALLOWED hand
         bestMove = allowedClosedHand[Math.floor(Math.random() * allowedClosedHand.length)];
     } else if (currentGameState.aiDifficulty === 'beginner') {
-        // Pick from the top 3 optimal discards (already filtered)
         const topMoves = analysis.slice(0, Math.min(3, analysis.length));
         bestMove = topMoves[Math.floor(Math.random() * topMoves.length)].discard;
     } else {
-        // Expert (Standard): Always pick the absolute best move from DP (already filtered)
         bestMove = analysis[0].discard;
     }
 
@@ -2685,6 +2690,7 @@ function rollbackVsMove() {
     vsGameState.showAiHand = lastState.showAiHand;
     vsGameState.latestDiscard = lastState.latestDiscard;
     vsGameState.currentSeed = lastState.currentSeed;
+    vsGameState.forbiddenDiscard = lastState.forbiddenDiscard;
     
     renderVsArena();
 }
