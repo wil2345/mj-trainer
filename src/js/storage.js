@@ -12,7 +12,23 @@ const defaultStats = {
     maxStreak: 0,
     totalTimeMs: 0,
     timedDecisions: 0,
-    history: []
+    history: [],
+    matches: [] // Holds AI Arena match trajectories
+};
+
+/**
+ * Adds a new match record to the beginning of the array, keeping only the last 50.
+ * @param {Object} record { seed: number, trajectory: Array, winner: string, timestamp: number }
+ */
+export const addMatchRecord = (record) => {
+    const stats = loadStats();
+    if (!stats.matches) stats.matches = [];
+
+    stats.matches.unshift(record);
+    if (stats.matches.length > 50) {
+        stats.matches = stats.matches.slice(0, 50);
+    }
+    saveStats(stats);
 };
 
 /**

@@ -1,7 +1,7 @@
 ﻿// app.js
 // Main entry point for the Taiwan Mahjong Trainer application
 
-import { loadStats, updateStat, getAccuracy, clearStats, getAverageTime } from './storage.js';
+import { loadStats, updateStat, getAccuracy, clearStats, getAverageTime, addMatchRecord } from './storage.js';
 import { renderTile } from './components/Tile.js';
 import { generateTrainingHand, sortHand } from './engine/handGenerator.js';
 import { getDiscardAnalysis, isWinningHand, getChiOptions, getPonOptions, calculateShanten, getKanOptions, getClosedKanOptions } from './engine/shanten.js';
@@ -173,69 +173,121 @@ function initApp() {
     const appContainer = document.getElementById('app');
     
     const stats = loadStats();
+    
+    // --- Training Stats ---
     const accuracy = getAccuracy();
     const streakDisplay = stats.totalDecisions === 0 ? '-' : stats.maxStreak;
     const currentStreakDisplay = stats.totalDecisions === 0 ? '-' : stats.currentStreak;
     const testsDoneDisplay = stats.totalDecisions === 0 ? '-' : stats.totalDecisions;
 
+    // --- AI Arena Stats ---
+    const matches = stats.matches || [];
+    const arenaGames = matches.length;
+    let playerWins = 0;
+    let dealIns = 0;
+
+    matches.forEach(m => {
+        if (m.winner === 'player') {
+            playerWins++;
+        } else if (m.winner === 'ai') {
+            // Check if it was a deal-in (AI ron)
+            const aiActions = m.trajectory.filter(t => t.actor === 'ai');
+            const lastAiAction = aiActions[aiActions.length - 1];
+            if (lastAiAction && lastAiAction.action === 'ron') {
+                dealIns++;
+            }
+        }
+    });
+
+    const winRate = arenaGames > 0 ? ((playerWins / arenaGames) * 100).toFixed(1) + '%' : '-';
+    const dealInRate = arenaGames > 0 ? ((dealIns / arenaGames) * 100).toFixed(1) + '%' : '-';
+    
+    const getWinRateColor = (rateStr) => {
+        if (rateStr === '-') return 'text-gray-400';
+        const val = parseFloat(rateStr);
+        if (val >= 50) return 'text-mj-green';
+        if (val < 30) return 'text-red-500';
+        return 'text-blue-500';
+    };
+    
+    const getDealInColor = (rateStr) => {
+        if (rateStr === '-') return 'text-gray-400';
+        const val = parseFloat(rateStr);
+        if (val > 20) return 'text-red-500';
+        if (val <= 10) return 'text-mj-green';
+        return 'text-orange-500';
+    };
+
     // Render the initial dashboard view
     appContainer.innerHTML = `
-        <div class="max-w-lg mx-auto mt-8 flex flex-col gap-6 px-2">
-            <!-- Stats Overview Card -->
-            <div class="bg-white rounded-xl shadow-md p-6 flex flex-col items-center relative transition-colors">
-
-                <div class="flex items-center gap-2 mb-2">
-                    <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.5.0</span>
+        <div class="max-w-lg mx-auto mt-6 flex flex-col gap-6 px-2 mb-10">
+            
+            <div class="flex flex-col items-center">
+                <div class="flex items-center gap-2 mb-1">
+                    <h2 class="text-2xl font-bold text-gray-800 text-center tracking-tight">Taiwan Mahjong Trainer</h2>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">v1.6.0</span>
                 </div>
-                <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
+                <p class="text-gray-500 text-xs font-medium">Master your efficiency & intuition</p>
+            </div>
+            
+            <!-- Statistics Section -->
+            <div class="flex flex-col gap-3 w-full">
                 
-                <div class="grid grid-cols-2 gap-3 w-full">
-                    <div class="bg-gray-50 rounded-lg p-3 sm:p-4 text-center border border-gray-100 transition-colors flex flex-col items-center justify-center">
-                        <div class="flex items-center gap-1 mb-1">
-                            <span class="text-base sm:text-lg">🎯</span>
-                            <p class="text-[10px] sm:text-xs text-gray-500 uppercase font-bold tracking-wider">Accuracy</p>
+                <!-- Training Mode Stats -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 transition-colors">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                        Training Stats
+                    </h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-gray-50 rounded-lg p-2 sm:p-3 text-center border border-gray-100 flex flex-col items-center justify-center">
+                            <p class="text-[9px] text-gray-500 uppercase font-bold tracking-wider mb-0.5">Accuracy</p>
+                            <p class="text-xl sm:text-2xl font-black ${getAccuracyColor(accuracy)}" id="dash-accuracy">${accuracy}</p>
                         </div>
-                        <p class="text-2xl sm:text-3xl font-black ${getAccuracyColor(accuracy)}" id="dash-accuracy">${accuracy}</p>
-                    </div>
-                    
-                    <div class="bg-gray-50 rounded-lg p-3 sm:p-4 text-center border border-gray-100 transition-colors flex flex-col items-center justify-center">
-                        <div class="flex items-center gap-1 mb-1">
-                            <span class="text-base sm:text-lg">📝</span>
-                            <p class="text-[10px] sm:text-xs text-gray-500 uppercase font-bold tracking-wider whitespace-nowrap">Tests Done</p>
+                        <div class="bg-gray-50 rounded-lg p-2 sm:p-3 text-center border border-gray-100 flex flex-col items-center justify-center">
+                            <p class="text-[9px] text-gray-500 uppercase font-bold tracking-wider mb-0.5 whitespace-nowrap">Tests Done</p>
+                            <p class="text-xl sm:text-2xl font-black text-gray-700" id="dash-tests-done">${testsDoneDisplay}</p>
                         </div>
-                        <p class="text-2xl sm:text-3xl font-black text-gray-700" id="dash-tests-done">${testsDoneDisplay}</p>
-                    </div>
-
-                    <div class="bg-gray-50 rounded-lg p-3 sm:p-4 text-center border border-gray-100 transition-colors flex flex-col items-center justify-center">
-                        <div class="flex items-center gap-1 mb-1">
-                            <span class="text-base sm:text-lg">⚡</span>
-                            <p class="text-[10px] sm:text-xs text-gray-500 uppercase font-bold tracking-wider whitespace-nowrap">Current Streak</p>
+                        <div class="bg-gray-50 rounded-lg p-2 sm:p-3 text-center border border-gray-100 flex flex-col items-center justify-center">
+                            <p class="text-[9px] text-gray-500 uppercase font-bold tracking-wider mb-0.5 whitespace-nowrap">Cur/Max Streak</p>
+                            <p class="text-lg font-black text-gray-700">
+                                <span class="${getStreakColor(currentStreakDisplay)}">${currentStreakDisplay}</span> <span class="text-xs text-gray-400">/</span> <span class="${getStreakColor(streakDisplay)} text-sm">${streakDisplay}</span>
+                            </p>
                         </div>
-                        <p class="text-2xl sm:text-3xl font-black ${getStreakColor(currentStreakDisplay)}" id="dash-current-streak">${currentStreakDisplay}</p>
-                    </div>
-                    
-                    <div class="bg-gray-50 rounded-lg p-3 sm:p-4 text-center border border-gray-100 transition-colors flex flex-col items-center justify-center">
-                        <div class="flex items-center gap-1 mb-1">
-                            <span class="text-base sm:text-lg">🔥</span>
-                            <p class="text-[10px] sm:text-xs text-gray-500 uppercase font-bold tracking-wider whitespace-nowrap">Max Streak</p>
+                        <div class="bg-gray-50 rounded-lg p-2 sm:p-3 text-center border border-gray-100 flex flex-col items-center justify-center">
+                            <p class="text-[9px] text-gray-500 uppercase font-bold tracking-wider mb-0.5 whitespace-nowrap">Avg Time</p>
+                            <p class="text-lg font-black text-gray-700" id="dash-avg-time">${getAverageTime()}</p>
                         </div>
-                        <p class="text-2xl sm:text-3xl font-black ${getStreakColor(streakDisplay)}" id="dash-max-streak">${streakDisplay}</p>
-                    </div>
-                    
-                    <div class="bg-gray-50 rounded-lg p-3 sm:p-4 text-center border border-gray-100 transition-colors flex flex-col items-center justify-center col-span-2">
-                        <div class="flex items-center gap-1 mb-1">
-                            <span class="text-base sm:text-lg">⏱️</span>
-                            <p class="text-[10px] sm:text-xs text-gray-500 uppercase font-bold tracking-wider whitespace-nowrap">Average Time</p>
-                        </div>
-                        <p class="text-2xl sm:text-3xl font-black text-gray-700" id="dash-avg-time">${getAverageTime()}</p>
                     </div>
                 </div>
+
+                <!-- AI Arena Stats -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 transition-colors">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h.01M15 9h.01M8 13h8" /></svg>
+                        AI Arena Stats
+                    </h3>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="bg-gray-50 rounded-lg p-2 sm:p-3 text-center border border-gray-100 flex flex-col items-center justify-center">
+                            <p class="text-[9px] text-gray-500 uppercase font-bold tracking-wider mb-0.5">Win Rate</p>
+                            <p class="text-lg font-black ${getWinRateColor(winRate)}">${winRate}</p>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-2 sm:p-3 text-center border border-gray-100 flex flex-col items-center justify-center">
+                            <p class="text-[9px] text-gray-500 uppercase font-bold tracking-wider mb-0.5 whitespace-nowrap">Deal-in (出銃)</p>
+                            <p class="text-lg font-black ${getDealInColor(dealInRate)}">${dealInRate}</p>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-2 sm:p-3 text-center border border-gray-100 flex flex-col items-center justify-center">
+                            <p class="text-[9px] text-gray-500 uppercase font-bold tracking-wider mb-0.5 whitespace-nowrap">Matches</p>
+                            <p class="text-lg font-black text-gray-700">${arenaGames}</p>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
             <!-- Game Modes Section -->
-            <div class="flex flex-col gap-3">
-                <h3 class="text-lg font-bold text-gray-700 px-1">Select Mode</h3>
+            <div class="flex flex-col gap-3 mt-2">
+                <h3 class="text-sm font-bold text-gray-400 px-1 uppercase tracking-widest">Select Mode</h3>
                 
                 <div id="btn-trainer" class="bg-white p-5 rounded-xl shadow-md border border-gray-200 flex items-center justify-between cursor-pointer hover:border-mj-green hover:shadow-lg transition group">
                     <div class="text-left">
@@ -1090,65 +1142,100 @@ function handleDiscard(tile, index) {
     renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator, tile, index);
 }
 
-function renderHistoryScene() {
+function renderHistoryScene(activeTab = 'training') {
     currentGameState.mode = 'History';
     const appContainer = document.getElementById('app');
     const stats = loadStats();
     const history = stats.history || [];
+    const matches = stats.matches || [];
 
-    const historyHtml = history.length === 0 
-        ? `<div class="flex flex-col items-center justify-center h-48 text-gray-400">
-             <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-             </svg>
-             <p>No history yet.</p>
-             <p class="text-xs mt-1">Play some hands in Training Mode to see your records here!</p>
-           </div>`
-        : history.map((record, index) => {
-            const timeStr = record.timeMs && record.timeMs > 0 ? `${(record.timeMs / 1000).toFixed(1)}s` : '-';
-            const handHtml = record.hand.map(t => renderTile(t, { size: 'xs', extraClasses: 'shadow-sm' })).join('');
-            const tileName = TILE_NAMES[record.userDiscard];
-            
-            return `
-                <div class="history-card bg-white p-4 rounded-xl shadow-md border border-gray-200 flex items-center justify-between gap-4 relative cursor-pointer hover:border-blue-400 hover:shadow-lg transition group" data-index="${index}">
-                    
-                    <div class="flex flex-col gap-2 w-full overflow-hidden">
+    let listHtml = '';
+
+    if (activeTab === 'training') {
+        listHtml = history.length === 0 
+            ? `<div class="flex flex-col items-center justify-center h-48 text-gray-400">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                 </svg>
+                 <p>No training history yet.</p>
+               </div>`
+            : history.map((record, index) => {
+                const timeStr = record.timeMs && record.timeMs > 0 ? `${(record.timeMs / 1000).toFixed(1)}s` : '-';
+                const handHtml = record.hand.map(t => renderTile(t, { size: 'xs', extraClasses: 'shadow-sm' })).join('');
+                const tileName = TILE_NAMES[record.userDiscard];
+                
+                return `
+                    <div class="history-card bg-white p-4 rounded-xl shadow-md border border-gray-200 flex items-center justify-between gap-4 relative cursor-pointer hover:border-blue-400 hover:shadow-lg transition group" data-index="${index}">
+                        
+                        <div class="flex flex-col gap-2 w-full overflow-hidden">
+                            <div class="flex justify-between items-center border-b border-gray-50 pb-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-bold text-gray-400">#${history.length - index}</span>
+                                    <span class="text-xs font-medium text-gray-500">${new Date(record.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="text-xs font-mono text-gray-500 flex items-center gap-0.5"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>${timeStr}</span>
+                                    <span class="${record.isCorrect ? 'bg-mj-green' : 'bg-mj-red'} text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">
+                                        ${record.isCorrect ? 'CORRECT' : 'WRONG'}
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <div class="flex flex-wrap gap-0.5 mt-1 overflow-x-auto pb-1 pointer-events-none">
+                                ${handHtml}
+                            </div>
+                            
+                            <div class="flex items-center gap-2 mt-1 bg-gray-50 p-2 rounded-lg pointer-events-none">
+                                <span class="text-xs text-gray-500 font-bold uppercase tracking-wider">SELECTED:</span>
+                                <div class="flex items-center gap-1">
+                                    ${renderTile(record.userDiscard, { size: 'xs' })}
+                                    <span class="font-bold text-gray-800 text-sm">${tileName}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex-shrink-0 text-gray-300 group-hover:text-blue-500 transition-colors pl-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+    } else {
+        listHtml = matches.length === 0 
+            ? `<div class="flex flex-col items-center justify-center h-48 text-gray-400">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                 </svg>
+                 <p>No AI matches played yet.</p>
+               </div>`
+            : matches.map((record, index) => {
+                const isPlayerWin = record.winner === 'player';
+                const isDraw = record.winner === 'draw';
+                const totalTurns = record.trajectory.filter(t => t.action === 'discard').length;
+                
+                return `
+                    <div class="match-card bg-white p-4 rounded-xl shadow-md border border-gray-200 flex flex-col gap-2 relative cursor-pointer hover:border-orange-400 hover:shadow-lg transition group" data-index="${index}">
                         <div class="flex justify-between items-center border-b border-gray-50 pb-2">
                             <div class="flex items-center gap-2">
-                                <span class="text-xs font-bold text-gray-400">#${history.length - index}</span>
-                                <span class="text-xs font-medium text-gray-500">${new Date(record.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                <span class="bg-gray-100 text-gray-600 font-bold px-2 py-0.5 rounded text-xs shadow-sm">Seed: ${record.seed}</span>
                             </div>
-                            <div class="flex items-center gap-3">
-                                <span class="text-xs font-mono text-gray-500 flex items-center gap-0.5"><svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>${timeStr}</span>
-                                <span class="${record.isCorrect ? 'bg-mj-green' : 'bg-mj-red'} text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">
-                                    ${record.isCorrect ? 'CORRECT' : 'WRONG'}
+                            <span class="text-xs font-medium text-gray-500">${new Date(record.timestamp).toLocaleDateString()} ${new Date(record.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        </div>
+                        <div class="flex justify-between items-center mt-1">
+                            <div class="flex items-center gap-2">
+                                <span class="${isPlayerWin ? 'bg-mj-green' : (isDraw ? 'bg-gray-400' : 'bg-mj-red')} text-white text-[11px] font-black px-2.5 py-1 rounded shadow-sm">
+                                    ${isPlayerWin ? '🏆 YOU WON' : (isDraw ? '🤝 DRAW' : '💀 AI WON')}
                                 </span>
+                                <span class="text-xs text-gray-500 font-bold ml-1">${totalTurns} turns</span>
                             </div>
-                        </div>
-                        
-                        <div class="flex flex-wrap gap-0.5 mt-1 overflow-x-auto pb-1 pointer-events-none">
-                            ${handHtml}
-                        </div>
-                        
-                        <div class="flex items-center gap-2 mt-1 bg-gray-50 p-2 rounded-lg pointer-events-none">
-                            <span class="text-xs text-gray-500 font-bold uppercase tracking-wider">SELECTED:</span>
-                            <div class="flex items-center gap-1">
-                                ${renderTile(record.userDiscard, { size: 'xs' })}
-                                <span class="font-bold text-gray-800 text-sm">${tileName}</span>
+                            <div class="text-gray-400 group-hover:text-orange-500 font-bold text-xs flex items-center gap-1 transition-colors">
+                                Review <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Right Arrow Indicator -->
-                    <div class="flex-shrink-0 text-gray-300 group-hover:text-blue-500 transition-colors pl-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                        </svg>
-                    </div>
-
-                </div>
-            `;
-        }).join('');
+                `;
+            }).join('');
+    }
 
     appContainer.innerHTML = `
         <div class="flex flex-col h-full max-w-4xl mx-auto mt-2 px-2 w-full">
@@ -1157,7 +1244,7 @@ function renderHistoryScene() {
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Recent History
+                    History
                 </h2>
                 <button id="back-btn" class="text-xs font-medium text-gray-500 hover:text-gray-800 flex items-center gap-1 bg-gray-100 px-3 py-1.5 rounded transition">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1166,39 +1253,74 @@ function renderHistoryScene() {
                     <span class="hidden sm:inline">Back</span>
                 </button>
             </div>
+
+            <!-- Tabs -->
+            <div class="flex gap-2 mb-4 bg-gray-200/50 p-1 rounded-xl w-full">
+                <button id="tab-training" class="flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'training' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}">
+                    Training
+                </button>
+                <button id="tab-arena" class="flex-1 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'arena' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}">
+                    AI Arena
+                </button>
+            </div>
             
-            <div id="history-scroll-container" class="flex flex-col gap-3 pb-8 overflow-y-auto" style="max-height: calc(100vh - 120px);">
-                ${historyHtml}
+            <div id="history-scroll-container" class="flex flex-col gap-3 pb-8 overflow-y-auto" style="max-height: calc(100vh - 160px);">
+                ${listHtml}
             </div>
         </div>
     `;
 
     document.getElementById('back-btn').addEventListener('click', initApp);
 
-    document.querySelectorAll('.history-card').forEach(card => {
-        card.addEventListener('click', (e) => {
-            const index = parseInt(e.currentTarget.dataset.index);
-            const record = history[index];
-            if (record) {
-                currentGameState.reviewingHistoryIndex = index;
-                currentGameState.hand = [...record.hand];
-                currentGameState.selectedHandSize = record.hand.length;
-                currentGameState.mcCache = {}; // Clear old MC results
-                currentGameState.enableMC = false; // Ensure MC is off in normal calculator
-                currentGameState.isMCMode = false;
-                startTrainingSession('進張計算機', true);
-            }
-        });
+    document.getElementById('tab-training').addEventListener('click', () => {
+        if (activeTab !== 'training') renderHistoryScene('training');
     });
 
-    if (currentGameState.reviewingHistoryIndex !== null) {
-        setTimeout(() => {
-            const targetCard = document.querySelector(`.history-card[data-index="${currentGameState.reviewingHistoryIndex}"]`);
-            if (targetCard) {
-                targetCard.scrollIntoView({ behavior: 'auto', block: 'center' });
-            }
-            currentGameState.reviewingHistoryIndex = null;
-        }, 50);
+    document.getElementById('tab-arena').addEventListener('click', () => {
+        if (activeTab !== 'arena') renderHistoryScene('arena');
+    });
+
+    if (activeTab === 'training') {
+        document.querySelectorAll('.history-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                const index = parseInt(e.currentTarget.dataset.index);
+                const record = history[index];
+                if (record) {
+                    currentGameState.reviewingHistoryIndex = index;
+                    currentGameState.hand = [...record.hand];
+                    currentGameState.selectedHandSize = record.hand.length;
+                    currentGameState.mcCache = {}; 
+                    currentGameState.enableMC = false; 
+                    currentGameState.isMCMode = false;
+                    startTrainingSession('進張計算機', true);
+                }
+            });
+        });
+
+        if (currentGameState.reviewingHistoryIndex !== null) {
+            setTimeout(() => {
+                const targetCard = document.querySelector(`.history-card[data-index="${currentGameState.reviewingHistoryIndex}"]`);
+                if (targetCard) {
+                    targetCard.scrollIntoView({ behavior: 'auto', block: 'center' });
+                }
+                currentGameState.reviewingHistoryIndex = null;
+            }, 50);
+        }
+    } else {
+        // AI Matches
+        document.querySelectorAll('.match-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                const index = parseInt(e.currentTarget.dataset.index);
+                const record = matches[index];
+                if (record) {
+                    // Load the game into replay mode directly
+                    vsGameState.currentSeed = record.seed;
+                    vsGameState.trajectory = record.trajectory;
+                    vsGameState.winner = record.winner;
+                    initReplayMode();
+                }
+            });
+        });
     }
 }
 
@@ -1722,8 +1844,60 @@ let vsGameState = {
     historyStack: [],
     currentSeed: null,
     aiActionMessage: null, // For temporary action bubbles
-    forbiddenDiscard: null // Tile that cannot be discarded this turn (Kuikae rule)
+    forbiddenDiscard: null, // Tile that cannot be discarded this turn (Kuikae rule)
+    aiLastStatus: null, // { shanten: number, acceptance: number } - Tracks state before AI draws/calls
+    
+    // Replay Mode State
+    isReplaying: false,
+    replayStep: 0,
+    fullTrajectory: []
 };
+
+/**
+ * Calculates the current shanten and acceptance of a resting hand (16 tiles),
+ * useful for knowing the state of a hand BEFORE drawing or AFTER a full turn.
+ */
+function calculateRestingStatus(actor) {
+    const state = vsGameState[actor];
+    const currentShanten = calculateShanten(state.closed, state.open.length);
+    let currentAcceptance = 0;
+    let currentAcceptedTilesCount = 0;
+
+    const initialCounts = {};
+    state.closed.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
+
+    const deadTiles = [];
+    deadTiles.push(...vsGameState.player.river);
+    deadTiles.push(...vsGameState.ai.river);
+    
+    const extractOpenTiles = (melds, isAiMeld) => {
+        let tiles = [];
+        melds.forEach(meld => {
+            if (Array.isArray(meld)) {
+                tiles.push(...meld);
+            } else if (meld.tiles) {
+                if (isAiMeld || !meld.isClosed || vsGameState.showAiHand || vsGameState.isGameOver) {
+                    tiles.push(...meld.tiles);
+                }
+            }
+        });
+        return tiles;
+    };
+    deadTiles.push(...extractOpenTiles(vsGameState.player.open, false));
+    deadTiles.push(...extractOpenTiles(vsGameState.ai.open, true));
+
+    deadTiles.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
+
+    Object.keys(TILE_NAMES).forEach(t => {
+        if ((initialCounts[t] || 0) >= 4) return;
+        if (calculateShanten([...state.closed, t], state.open.length) < currentShanten) {
+            currentAcceptance += (4 - (initialCounts[t] || 0));
+            currentAcceptedTilesCount += 1;
+        }
+    });
+
+    return { shanten: currentShanten, acceptance: currentAcceptance, acceptedTilesCount: currentAcceptedTilesCount };
+}
 
 /**
  * Displays a temporary action bubble over the AI's avatar.
@@ -1767,7 +1941,8 @@ function saveVsSnapshot() {
         showAiHand: vsGameState.showAiHand,
         latestDiscard: vsGameState.latestDiscard,
         currentSeed: vsGameState.currentSeed,
-        forbiddenDiscard: vsGameState.forbiddenDiscard
+        forbiddenDiscard: vsGameState.forbiddenDiscard,
+        aiLastStatus: vsGameState.aiLastStatus
     }));
     
     vsGameState.historyStack.push(snapshot);
@@ -1905,9 +2080,11 @@ function renderVsArena() {
                         <div class="flex items-center gap-1.5">
                             <div class="w-4 h-4 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-[8px] font-black">AI</div>
                             ${(currentGameState.showAiTenpai && !isGameOver) ? (
-                                aiShanten === 0 
-                                ? '<span class="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded animate-pulse">叫糊</span>' 
-                                : `<span class="bg-gray-400 text-white text-[8px] font-bold px-1.5 py-0.5 rounded">${aiShanten}向聽</span>`
+                                aiShanten === -1
+                                ? '<span class="bg-yellow-400 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-sm">胡牌</span>'
+                                : (aiShanten === 0 
+                                    ? '<span class="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded animate-pulse">叫糊</span>' 
+                                    : `<span class="bg-gray-400 text-white text-[8px] font-bold px-1.5 py-0.5 rounded">${aiShanten}向聽</span>`)
                             ) : ''}
                         </div>
                         <div class="flex items-center gap-2">
@@ -1972,14 +2149,21 @@ function renderVsArena() {
                             </div>
                         ` : ''}
 
-                        ${isGameOver ? `
-                            <div class="bg-white p-4 rounded-2xl shadow-2xl border border-gray-100 flex flex-col items-center animate-fade-in-up">
-                                <div class="bg-yellow-400 text-white font-black px-6 py-2 rounded-full shadow-lg mb-3">
-                                    ${winner === 'player' ? 'YOU WIN!' : (winner === 'ai' ? 'AI WINS!' : 'DRAW (流局)')}
+                        ${isGameOver && !vsGameState.isReplaying ? `
+                            <div class="bg-white p-5 rounded-2xl shadow-2xl border border-gray-100 flex flex-col items-center animate-fade-in-up w-full max-w-sm">
+                                <h3 class="text-2xl font-black ${winner === 'player' ? 'text-mj-green' : (winner === 'ai' ? 'text-mj-red' : 'text-gray-600')} mb-1 drop-shadow-sm tracking-widest text-center">
+                                    ${winner === 'player' ? '🎉 YOU WIN!' : (winner === 'ai' ? '💀 AI WINS!' : '🤝 DRAW (流局)')}
+                                </h3>
+                                <p class="text-xs text-gray-500 mb-4 font-medium text-center">Match finished.</p>
+                                
+                                <div class="flex gap-3 w-full">
+                                    <button id="vs-review-btn" class="bg-blue-500 text-white px-4 py-2.5 rounded-xl font-bold shadow-md hover:bg-blue-600 transition active:scale-95 flex-1 whitespace-nowrap">
+                                        覆盤 (Replay)
+                                    </button>
+                                    <button id="vs-restart-btn" class="bg-mj-green text-white px-4 py-2.5 rounded-xl font-bold shadow-md hover:bg-emerald-600 transition active:scale-95 flex-1 whitespace-nowrap">
+                                        下一局(Next Game)
+                                    </button>
                                 </div>
-                                <button id="vs-restart-btn" class="bg-mj-green text-white px-8 py-2.5 rounded-xl font-bold shadow-md hover:bg-emerald-600 transition w-full">
-                                    Play Again
-                                </button>
                             </div>
                         ` : ''}
                     </div>
@@ -2021,13 +2205,6 @@ function renderVsArena() {
             rollbackVsMove();
         });
     }
-
-    const vsSeedBtn = document.getElementById('vs-seed-btn');
-    if (vsSeedBtn) {
-        vsSeedBtn.addEventListener('click', () => {
-            showSeedModal();
-        });
-    }
     
     document.getElementById('toggle-ai-hand-btn').addEventListener('click', () => {
         vsGameState.showAiHand = !vsGameState.showAiHand;
@@ -2036,6 +2213,13 @@ function renderVsArena() {
 
     if (isGameOver && document.getElementById('vs-restart-btn')) {
         document.getElementById('vs-restart-btn').addEventListener('click', () => startVsMode());
+    }
+
+    const vsReviewBtn = document.getElementById('vs-review-btn');
+    if (isGameOver && vsReviewBtn && !vsGameState.isReplaying) {
+        vsReviewBtn.addEventListener('click', () => {
+            initReplayMode();
+        });
     }
 
     if (pendingAction) {
@@ -2081,6 +2265,17 @@ function renderVsArena() {
 }
 
 
+function saveMatchIfOver() {
+    if (vsGameState.isGameOver) {
+        addMatchRecord({
+            seed: vsGameState.currentSeed,
+            winner: vsGameState.winner,
+            trajectory: vsGameState.trajectory,
+            timestamp: Date.now()
+        });
+    }
+}
+
 function handleVsAction(type) {
     const { pendingAction } = vsGameState;
     const tile = pendingAction ? pendingAction.tile : null;
@@ -2092,6 +2287,7 @@ function handleVsAction(type) {
         vsGameState.winner = 'player';
         vsGameState.trajectory.push({ actor: 'player', action: 'tsumo' });
         vsGameState.pendingAction = null;
+        saveMatchIfOver();
         renderVsArena();
     } else if (type === 'ron') {
         vsGameState.isGameOver = true;
@@ -2099,6 +2295,7 @@ function handleVsAction(type) {
         vsGameState.player.closed.push(tile);
         vsGameState.trajectory.push({ actor: 'player', action: 'ron', tile });
         vsGameState.pendingAction = null;
+        saveMatchIfOver();
         renderVsArena();
     } else if (type === 'pon') {
         // Remove 2 tiles from hand
@@ -2221,6 +2418,7 @@ function vsPlayerDiscard(index) {
     if (vsGameState.wall.length === 0) {
         vsGameState.isGameOver = true;
         vsGameState.winner = 'draw';
+        saveMatchIfOver();
         renderVsArena();
         return;
     }
@@ -2239,9 +2437,13 @@ function checkAiInterrupt(tile) {
         vsGameState.ai.closed.push(tile);
         vsGameState.trajectory.push({ actor: 'ai', action: 'ron', tile: tile });
         showAiActionBubble('糊');
+        saveMatchIfOver();
         renderVsArena();
         return true;
     }
+
+    // Snapshot AI's resting status before it potentially calls a tile
+    vsGameState.aiLastStatus = calculateRestingStatus('ai');
 
     // AI logic for Pon/Chi/Kan
     // We must evaluate the CURRENT resting hand (e.g. 16 tiles). It is a 3n+1 hand.
@@ -2503,10 +2705,11 @@ async function vsAiDiscard() {
 
     let bestMove;
     const handSizeAfterDiscard = vsGameState.ai.closed.length - 1;
+    let analysisPayload = null; // Will hold reasoning for Replay mode
 
-    if (currentGameState.aiDifficulty === 'expert' && (handSizeAfterDiscard === 8 || handSizeAfterDiscard <= 5)) {
+    if (currentGameState.aiDifficulty === 'expert' && handSizeAfterDiscard <= 8) {
         // --- Expert internal Monte Carlo logic ---
-        const iterations = handSizeAfterDiscard === 8 ? 100 : 1000;
+        const iterations = handSizeAfterDiscard >= 7 ? 100 : 1000;
         const maxDraws = 5;
         
         // Filter candidates: ONLY evaluate moves that maintain the absolute best possible Shanten for this hand state.
@@ -2542,28 +2745,70 @@ async function vsAiDiscard() {
                 }
             });
             bestMove = candidates[bestCandidateIdx].discard;
+            
+            analysisPayload = {
+                type: 'mc',
+                options: candidates.map((c, idx) => ({ discard: c.discard, winRate: evaluations[idx] })).sort((a, b) => b.winRate - a.winRate)
+            };
         } else {
             bestMove = candidates[0].discard;
+            analysisPayload = { type: 'mc', options: [{ discard: bestMove, winRate: 100 }] };
         }
     } else if (currentGameState.aiDifficulty === 'random') {
         bestMove = allowedClosedHand[Math.floor(Math.random() * allowedClosedHand.length)];
+        analysisPayload = { type: 'random', options: [] };
     } else if (currentGameState.aiDifficulty === 'beginner') {
         const topMoves = analysis.slice(0, Math.min(3, analysis.length));
         bestMove = topMoves[Math.floor(Math.random() * topMoves.length)].discard;
+        analysisPayload = { 
+            type: 'beginner', 
+            options: topMoves.map(m => ({ 
+                discard: m.discard, 
+                shanten: m.shanten, 
+                acceptance: m.acceptance,
+                acceptedTilesCount: m.acceptedTiles.length 
+            })) 
+        };
     } else {
         bestMove = analysis[0].discard;
+        analysisPayload = { 
+            type: 'dp', 
+            options: analysis.slice(0, 3).map(m => ({ 
+                discard: m.discard, 
+                shanten: m.shanten, 
+                acceptance: m.acceptance,
+                acceptedTilesCount: m.acceptedTiles.length
+            })) 
+        };
+    }
+    
+    if (analysisPayload) {
+        const chosenAnalysis = analysis.find(a => a.discard === bestMove) || analysis[0];
+        analysisPayload.previousStatus = vsGameState.aiLastStatus;
+        if (chosenAnalysis) {
+            analysisPayload.chosenStatus = { 
+                shanten: chosenAnalysis.shanten, 
+                acceptance: chosenAnalysis.acceptance,
+                acceptedTilesCount: chosenAnalysis.acceptedTiles.length
+            };
+        }
     }
 
-    executeAiDiscard(bestMove);
+    executeAiDiscard(bestMove, analysisPayload);
 }
 
-function executeAiDiscard(bestMove) {
+function executeAiDiscard(bestMove, analysisPayload = null) {
     const discardIndex = vsGameState.ai.closed.indexOf(bestMove);
     vsGameState.ai.closed.splice(discardIndex, 1);
     vsGameState.ai.river.push(bestMove);
     vsGameState.latestDiscard = { owner: 'ai', index: vsGameState.ai.river.length - 1 };
     vsGameState.ai.closed = sortHand(vsGameState.ai.closed);
-    vsGameState.trajectory.push({ actor: 'ai', action: 'discard', tile: bestMove });
+    
+    const trajectoryEntry = { actor: 'ai', action: 'discard', tile: bestMove };
+    if (analysisPayload) {
+        trajectoryEntry.analysis = analysisPayload;
+    }
+    vsGameState.trajectory.push(trajectoryEntry);
 
     // After AI discards, check if Player can steal
     if (checkPlayerInterrupt(bestMove)) return;
@@ -2655,66 +2900,41 @@ function vsAiTurn() {
 }
 
 
-function showSeedModal() {
-    let modalEl = document.getElementById('seed-modal-root');
+function showKanModal(options) {
+    let modalEl = document.getElementById('chi-modal-root'); // Reuse chi modal root
     if (!modalEl) {
         modalEl = document.createElement('div');
-        modalEl.id = 'seed-modal-root';
+        modalEl.id = 'chi-modal-root';
         document.body.appendChild(modalEl);
     }
 
     modalEl.innerHTML = `
         <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
             <div class="bg-white rounded-2xl w-full max-w-xs p-6 shadow-2xl animate-fade-in-up">
-                <h3 class="font-bold text-gray-800 mb-2 text-center text-lg">Match Seed</h3>
-                <p class="text-xs text-gray-500 mb-4 text-center">Enter a custom seed to replay a specific match.</p>
-                
-                <div class="relative mb-4">
-                    <input type="number" id="seed-input" step="1"
-                        class="w-full border-2 border-gray-100 rounded-xl px-4 py-3 text-center font-mono text-xl focus:border-purple-500 focus:outline-none transition-colors"
-                        placeholder="e.g. 123456" value="${vsGameState.currentSeed}">
-                    <button id="copy-seed-btn" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-purple-600 transition" title="Copy Seed">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                        </svg>
-                    </button>
+                <h3 class="font-bold text-gray-800 mb-4 text-center">Choose Kan Type</h3>
+                <div class="flex flex-col gap-3">
+                    ${options.map((opt, i) => `
+                        <button class="kan-opt-btn flex items-center justify-center gap-2 p-3 border-2 border-gray-100 rounded-xl hover:border-orange-500 hover:bg-orange-50 transition" data-index="${i}">
+                            ${renderTile(opt.tile, { size: 'xs' })}
+                            <span class="text-xs font-bold text-gray-600">${opt.type === 'ankan' ? '暗槓' : '加槓'}</span>
+                        </button>
+                    `).join('')}
                 </div>
-                
-                <div class="flex gap-2">
-                    <button id="close-seed-modal" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl transition">
-                        Cancel
-                    </button>
-                    <button id="apply-seed-btn" class="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-xl shadow-md transition active:scale-95">
-                        Apply
-                    </button>
-                </div>
+                <button id="close-kan-modal" class="w-full mt-4 text-gray-500 font-bold py-2">Cancel</button>
             </div>
         </div>
     `;
 
-    document.getElementById('close-seed-modal').addEventListener('click', () => {
-        modalEl.innerHTML = '';
-    });
-
-    document.getElementById('copy-seed-btn').addEventListener('click', () => {
-        const input = document.getElementById('seed-input');
-        navigator.clipboard.writeText(input.value).then(() => {
-            const btn = document.getElementById('copy-seed-btn');
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-mj-green" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
-            setTimeout(() => btn.innerHTML = originalHtml, 2000);
+    document.querySelectorAll('.kan-opt-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = parseInt(e.currentTarget.dataset.index);
+            modalEl.innerHTML = '';
+            executeKanSelf(options[index]);
         });
     });
 
-    document.getElementById('apply-seed-btn').addEventListener('click', () => {
-        const input = document.getElementById('seed-input');
-        const val = Math.floor(parseFloat(input.value));
-        if (!isNaN(val)) {
-            modalEl.innerHTML = '';
-            startVsMode(val);
-        } else {
-            alert('Please enter a valid numeric seed.');
-        }
+    document.getElementById('close-kan-modal').addEventListener('click', () => {
+        modalEl.innerHTML = '';
     });
 }
 
@@ -2791,41 +3011,460 @@ function vsDrawReplacement(actor) {
     }
 }
 
-function showKanModal(options) {
-    let modalEl = document.getElementById('chi-modal-root'); // Reuse chi modal root
-    if (!modalEl) {
-        modalEl = document.createElement('div');
-        modalEl.id = 'chi-modal-root';
-        document.body.appendChild(modalEl);
+// --- Replay Mode ---
+
+function initReplayMode() {
+    currentGameState.mode = '覆盤';
+    vsGameState.isReplaying = true;
+    vsGameState.showAiHand = true; // Omniscience mode
+    vsGameState.fullTrajectory = [...vsGameState.trajectory];
+    vsGameState.replayStep = vsGameState.fullTrajectory.length; // Start at the end
+    
+    renderReplayStep(vsGameState.replayStep);
+}
+
+function renderReplayStep(stepIndex) {
+    // 1. Deterministic Board Reconstruction
+    // To go to a specific step, we must restart from the initial seed and replay actions
+    const seed = vsGameState.currentSeed;
+    const seededRandom = mulberry32(seed);
+    
+    // Initialize Wall
+    vsGameState.wall = createDeck();
+    
+    // Seeded Shuffle
+    for (let i = vsGameState.wall.length - 1; i > 0; i--) {
+        const j = Math.floor(seededRandom() * (i + 1));
+        [vsGameState.wall[i], vsGameState.wall[j]] = [vsGameState.wall[j], vsGameState.wall[i]];
     }
 
-    modalEl.innerHTML = `
-        <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div class="bg-white rounded-2xl w-full max-w-xs p-6 shadow-2xl animate-fade-in-up">
-                <h3 class="font-bold text-gray-800 mb-4 text-center">Choose Kan Type</h3>
-                <div class="flex flex-col gap-3">
-                    ${options.map((opt, i) => `
-                        <button class="kan-opt-btn flex items-center justify-center gap-2 p-3 border-2 border-gray-100 rounded-xl hover:border-orange-500 hover:bg-orange-50 transition" data-index="${i}">
-                            ${renderTile(opt.tile, { size: 'xs' })}
-                            <span class="text-xs font-bold text-gray-600">${opt.type === 'ankan' ? '暗槓' : '加槓'}</span>
-                        </button>
+    // Deal 16 tiles each
+    vsGameState.player = { closed: sortHand(vsGameState.wall.splice(0, 16)), open: [], river: [] };
+    vsGameState.ai = { closed: sortHand(vsGameState.wall.splice(0, 16)), open: [], river: [] };
+    vsGameState.latestDiscard = null;
+    vsGameState.isGameOver = (stepIndex === vsGameState.fullTrajectory.length); // Only show Game Over if at the very end
+    
+    let currentTrajectoryItem = null;
+
+    // 2. Fast-Forward to Step
+    for (let i = 0; i < stepIndex; i++) {
+        const t = vsGameState.fullTrajectory[i];
+        currentTrajectoryItem = t;
+        const actor = t.actor;
+        
+        switch (t.action) {
+            case 'draw':
+            case 'draw_replacement':
+                const drawnTile = vsGameState.wall.shift();
+                vsGameState[actor].closed.push(drawnTile);
+                break;
+            case 'discard':
+                vsGameState[actor].closed.splice(vsGameState[actor].closed.indexOf(t.tile), 1);
+                vsGameState[actor].river.push(t.tile);
+                vsGameState.latestDiscard = { owner: actor, index: vsGameState[actor].river.length - 1 };
+                vsGameState[actor].closed = sortHand(vsGameState[actor].closed);
+                break;
+            case 'chi':
+                // For Replay, we don't have the exact opt array, but we can infer it or just know a tile was taken from the opponent's river
+                // The actual stolen tile is t.tile. We remove it from the opponent's river (latest discard).
+                const oppChi = actor === 'player' ? 'ai' : 'player';
+                if (vsGameState.latestDiscard && vsGameState.latestDiscard.owner === oppChi) {
+                    vsGameState[oppChi].river.pop();
+                    vsGameState.latestDiscard = null;
+                }
+                // Just visually represent the meld - exact ordering doesn't matter as much for simple replay, but we try our best.
+                // We know t.tile was stolen. We need to remove two connecting tiles from closed.
+                // Simplified approach for Replay: just grab two connecting tiles.
+                let valChi = parseInt(t.tile[0]);
+                let suitChi = t.tile[1];
+                let c1 = null, c2 = null;
+                
+                // Try to find the exact tiles that were removed (this is tricky without saving the full opt array in trajectory)
+                // For perfect replay, we should really update trajectory to save the `opt` array. 
+                // For now, simple greedy inference:
+                if (vsGameState[actor].closed.includes(`${valChi-1}${suitChi}`) && vsGameState[actor].closed.includes(`${valChi+1}${suitChi}`)) {
+                    c1 = `${valChi-1}${suitChi}`; c2 = `${valChi+1}${suitChi}`;
+                } else if (vsGameState[actor].closed.includes(`${valChi-2}${suitChi}`) && vsGameState[actor].closed.includes(`${valChi-1}${suitChi}`)) {
+                    c1 = `${valChi-2}${suitChi}`; c2 = `${valChi-1}${suitChi}`;
+                } else if (vsGameState[actor].closed.includes(`${valChi+1}${suitChi}`) && vsGameState[actor].closed.includes(`${valChi+2}${suitChi}`)) {
+                    c1 = `${valChi+1}${suitChi}`; c2 = `${valChi+2}${suitChi}`;
+                }
+                
+                if (c1 && c2) {
+                    vsGameState[actor].closed.splice(vsGameState[actor].closed.indexOf(c1), 1);
+                    vsGameState[actor].closed.splice(vsGameState[actor].closed.indexOf(c2), 1);
+                    vsGameState[actor].open.push([c1, t.tile, c2]);
+                }
+                break;
+            case 'pon':
+                const oppPon = actor === 'player' ? 'ai' : 'player';
+                if (vsGameState.latestDiscard && vsGameState.latestDiscard.owner === oppPon) {
+                    vsGameState[oppPon].river.pop();
+                    vsGameState.latestDiscard = null;
+                }
+                vsGameState[actor].closed.splice(vsGameState[actor].closed.indexOf(t.tile), 1);
+                vsGameState[actor].closed.splice(vsGameState[actor].closed.indexOf(t.tile), 1);
+                vsGameState[actor].open.push([t.tile, t.tile, t.tile]);
+                break;
+            case 'kan':
+                // Open kan from discard
+                const oppKan = actor === 'player' ? 'ai' : 'player';
+                if (vsGameState.latestDiscard && vsGameState.latestDiscard.owner === oppKan) {
+                    vsGameState[oppKan].river.pop();
+                    vsGameState.latestDiscard = null;
+                }
+                vsGameState[actor].closed = vsGameState[actor].closed.filter(tile => tile !== t.tile);
+                vsGameState[actor].open.push([t.tile, t.tile, t.tile, t.tile]);
+                break;
+            case 'ankan':
+                vsGameState[actor].closed = vsGameState[actor].closed.filter(tile => tile !== t.tile);
+                vsGameState[actor].open.push({ tiles: [t.tile, t.tile, t.tile, t.tile], isClosed: true });
+                break;
+            case 'kakan':
+                const meldIdx = vsGameState[actor].open.findIndex(m => !Array.isArray(m) ? (m.tiles[0] === t.tile) : (m[0] === t.tile && m.length === 3));
+                if (meldIdx !== -1) {
+                    if (Array.isArray(vsGameState[actor].open[meldIdx])) {
+                        vsGameState[actor].open[meldIdx].push(t.tile);
+                    } else {
+                        vsGameState[actor].open[meldIdx].tiles.push(t.tile);
+                    }
+                }
+                vsGameState[actor].closed.splice(vsGameState[actor].closed.indexOf(t.tile), 1);
+                break;
+            case 'ron':
+                const oppRon = actor === 'player' ? 'ai' : 'player';
+                if (vsGameState.latestDiscard && vsGameState.latestDiscard.owner === oppRon) {
+                    // Pull from river
+                    const popped = vsGameState[oppRon].river.pop();
+                    vsGameState[actor].closed.push(popped);
+                }
+                break;
+            case 'tsumo':
+                break;
+        }
+    }
+
+    // 3. Render Custom Replay UI
+    renderReplayUI(stepIndex, currentTrajectoryItem);
+}
+
+function renderReplayUI(stepIndex, currentTrajectoryItem) {
+    const appContainer = document.getElementById('app');
+    const { player, ai, wall, latestDiscard, fullTrajectory } = vsGameState;
+
+    // Use same render helpers
+    const renderRiverTile = (t, owner, idx) => {
+        const isLatest = latestDiscard && latestDiscard.owner === owner && latestDiscard.index === idx;
+        const extraClasses = isLatest ? 'ring-2 ring-blue-500 shadow-md transform -translate-y-0.5 z-10 scale-110' : 'opacity-90';
+        return renderTile(t, { size: 'xs', extraClasses });
+    };
+    const renderOpenMelds = (melds) => melds.map(meld => {
+        const tiles = Array.isArray(meld) ? meld : meld.tiles;
+        return `
+            <div class="flex border border-gray-200 rounded-md p-0.5 bg-gray-50/50 w-fit justify-center gap-0.5 shadow-sm">      
+                ${tiles.map(t => renderTile(t, { size: 'xs', faceDown: false })).join('')}
+            </div>
+        `;
+    }).join('');
+
+    const aiShanten = calculateShanten(ai.closed, ai.open.length);
+
+    // Build Insight Panel
+    let insightHtml = '';
+    if (currentTrajectoryItem && currentTrajectoryItem.actor === 'ai' && currentTrajectoryItem.action === 'discard' && currentTrajectoryItem.analysis) {
+        const data = currentTrajectoryItem.analysis;
+        
+        // 1. Ensure Before state has all stats
+        let prev = data.previousStatus;
+        if (!prev) {
+            const tempHand = [...ai.closed, currentTrajectoryItem.tile];
+            const currentShanten = calculateShanten(tempHand, ai.open.length);
+            let acc = 0, kuan = 0;
+            const initialCounts = {};
+            tempHand.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
+            const deadTiles = [...player.river, ...ai.river];
+            deadTiles.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
+            Object.keys(TILE_NAMES).forEach(t => {
+                if ((initialCounts[t] || 0) >= 4) return;
+                if (calculateShanten([...tempHand, t], ai.open.length) < currentShanten) {
+                    acc += (4 - (initialCounts[t] || 0));
+                    kuan += 1;
+                }
+            });
+            prev = { shanten: currentShanten, acceptance: acc, acceptedTilesCount: kuan };
+        }
+
+        // 2. Ensure After state has all stats
+        let chosen = data.chosenStatus;
+        if (!chosen) {
+            const currentShanten = calculateShanten(ai.closed, ai.open.length);
+            let acc = 0, kuan = 0;
+            const initialCounts = {};
+            ai.closed.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
+            const deadTiles = [...player.river, ...ai.river];
+            deadTiles.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
+            Object.keys(TILE_NAMES).forEach(t => {
+                if ((initialCounts[t] || 0) >= 4) return;
+                if (calculateShanten([...ai.closed, t], ai.open.length) < currentShanten) {
+                    acc += (4 - (initialCounts[t] || 0));
+                    kuan += 1;
+                }
+            });
+            chosen = { shanten: currentShanten, acceptance: acc, acceptedTilesCount: kuan };
+        }
+
+        let statusCompareHtml = '';
+        if (prev && chosen) {
+            // Logic for colors based on changes
+            const getStatColor = (current, previous, isShanten = false) => {
+                if (isShanten) {
+                    if (current < previous) return 'text-mj-green';
+                    if (current > previous) return 'text-mj-red';
+                    return 'text-gray-700';
+                }
+                if (current > previous) return 'text-mj-green';
+                if (current < previous) return 'text-mj-red';
+                return 'text-blue-500';
+            };
+
+            const shantenColor = getStatColor(chosen.shanten, prev.shanten, true);
+            const kuanColor = getStatColor(chosen.acceptedTilesCount, prev.acceptedTilesCount);
+            const accColor = getStatColor(chosen.acceptance, prev.acceptance);
+            
+            const isImproved = (chosen.shanten < prev.shanten) || (chosen.shanten === prev.shanten && chosen.acceptance > prev.acceptance);
+            const arrowColor = isImproved ? 'text-mj-green' : 'text-blue-200';
+
+            statusCompareHtml = `
+                <div class="flex items-center justify-between bg-blue-50/50 p-3 rounded-xl mb-3 border border-blue-100/50 text-xs shadow-inner w-full">
+                    <div class="flex flex-col items-center flex-1">
+                        <span class="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-1">Before Action</span>
+                        <div class="flex flex-col items-center">
+                            <span class="font-black text-gray-700 text-sm">${prev.shanten === 0 ? '叫糊' : prev.shanten + '向聽'}</span>
+                            <span class="text-blue-500 font-bold text-[10px]">${prev.acceptedTilesCount}款 ${prev.acceptance}張</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex-shrink-0 ${arrowColor} mx-2">
+                        <svg class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                    </div>
+
+                    <div class="flex flex-col items-center flex-1">
+                        <span class="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-1">After Discard</span>
+                        <div class="flex flex-col items-center">
+                            <span class="font-black ${shantenColor} text-sm">${chosen.shanten === 0 ? '叫糊' : chosen.shanten + '向聽'}</span>
+                            <div class="flex gap-1 items-baseline">
+                                <span class="${kuanColor} font-bold text-[10px]">${chosen.acceptedTilesCount}款</span>
+                                <span class="${accColor} font-bold text-[10px]">${chosen.acceptance}張</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        let insightDetails = '';
+        if (data.type === 'mc') {
+            insightDetails = `
+                <div class="flex flex-col gap-1 w-full bg-white/50 p-2 rounded-lg">
+                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Monte Carlo Simulation</p>
+                    ${data.options.map((opt, idx) => `
+                        <div class="flex items-center justify-between text-xs">
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-400 font-mono">${idx + 1}.</span>
+                                ${renderTile(opt.discard, { size: 'xs' })}
+                            </div>
+                            <span class="font-black ${idx === 0 ? 'text-purple-600' : 'text-gray-500'}">${opt.winRate.toFixed(1)}%</span>
+                        </div>
                     `).join('')}
                 </div>
-                <button id="close-kan-modal" class="w-full mt-4 text-gray-500 font-bold py-2">Cancel</button>
+            `;
+        } else {
+            insightDetails = `
+                <div class="flex flex-col gap-1 w-full bg-white/50 p-2 rounded-lg">
+                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">DP Analysis (${data.type === 'defensive' ? 'Defensive' : 'Greedy'})</p>
+                    ${data.options.map((opt, idx) => {
+                        // Calculate 款 retroactively if missing in list
+                        let kCount = opt.acceptedTilesCount;
+                        if (kCount === undefined) {
+                            const tempH = ai.closed.filter(t => t !== opt.discard); 
+                            const curS = calculateShanten(tempH, ai.open.length);
+                            kCount = 0;
+                            const hCounts = {};
+                            tempH.forEach(t => { hCounts[t] = (hCounts[t] || 0) + 1; });
+                            Object.keys(TILE_NAMES).forEach(t => {
+                                if ((hCounts[t] || 0) >= 4) return;
+                                if (calculateShanten([...tempH, t], ai.open.length) < curS) kCount++;
+                            });
+                        }
+
+                        // Colors for the list based on comparison to "Before" state
+                        const sColor = opt.shanten < prev.shanten ? 'text-mj-green' : (opt.shanten > prev.shanten ? 'text-mj-red' : 'text-gray-500');
+                        const kColor = kCount > prev.acceptedTilesCount ? 'text-mj-green' : (kCount < prev.acceptedTilesCount ? 'text-mj-red' : 'text-blue-500');
+                        const aColor = opt.acceptance > prev.acceptance ? 'text-mj-green' : (opt.acceptance < prev.acceptance ? 'text-mj-red' : 'text-blue-500');
+
+                        return `
+                        <div class="flex items-center justify-between text-xs">
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-400 font-mono">${idx + 1}.</span>
+                                ${renderTile(opt.discard, { size: 'xs' })}
+                            </div>
+                            <div class="flex gap-2 text-[10px] font-bold">
+                                <span class="${sColor}">${opt.shanten === 0 ? '叫糊' : opt.shanten + '向聽'}</span>
+                                <span class="${kColor}">${kCount}款</span>
+                                <span class="${aColor}">${opt.acceptance}張</span>
+                            </div>
+                        </div>
+                    `}).join('')}
+                </div>
+            `;
+        }
+
+        insightHtml = `
+            <div class="bg-white/80 backdrop-blur-md p-3 rounded-xl border border-blue-100 shadow-lg w-full mb-3 animate-fade-in-up">
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded shadow-sm uppercase tracking-tighter">AI Analysis</span>
+                    <span class="text-sm font-bold text-gray-700">Discarded ${TILE_NAMES[currentTrajectoryItem.tile]}</span>
+                </div>
+                ${statusCompareHtml}
+                ${insightDetails}
+            </div>
+        `;
+    }
+
+    appContainer.innerHTML = `
+        <div class="flex flex-col h-screen overflow-hidden bg-gray-100 relative">
+            <!-- Scrollable Content -->
+            <div class="flex-grow overflow-y-auto pb-64 pt-2 px-2 hide-scrollbar">
+                
+                <!-- Replay Header -->
+                <div class="max-w-4xl mx-auto flex justify-between items-center mb-2 px-1">
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-xs font-black text-gray-700 uppercase tracking-tighter flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            覆盤 (Review)
+                        </h2>
+                        <span class="bg-white border border-gray-200 text-gray-500 text-[9px] font-bold px-2 py-0.5 rounded shadow-sm">
+                            Step ${stepIndex} / ${fullTrajectory.length}
+                        </span>
+                    </div>
+                    <button id="exit-replay-btn" class="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-gray-800 transition shadow-sm text-xs font-bold px-3">
+                        Exit
+                    </button>
+                </div>
+
+                <!-- AI Section -->
+                <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-2 mb-2">
+                    <div class="flex justify-between items-center mb-1.5 px-1">
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-4 h-4 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-[8px] font-black">AI</div>
+                            ${aiShanten === -1
+                                ? '<span class="bg-yellow-400 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-sm">胡牌</span>'
+                                : (aiShanten === 0 
+                                    ? '<span class="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded animate-pulse shadow-sm">叫糊</span>' 
+                                    : `<span class="bg-gray-400 text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow-sm">${aiShanten}向聽</span>`)
+                            }
+                        </div>
+                    </div>
+                    
+                    <div class="flex flex-wrap gap-0.5 justify-center mb-2">
+                        ${ai.closed.map(t => renderTile(t, { size: 'xs', faceDown: false })).join('')}
+                    </div>
+
+                    <div class="flex flex-wrap gap-1 justify-start overflow-x-auto hide-scrollbar">
+                        ${renderOpenMelds(ai.open)}
+                    </div>
+                </div>
+
+                <!-- Central Table -->
+                <div class="max-w-4xl mx-auto">
+                    <div class="bg-emerald-800/10 rounded-2xl p-2 sm:p-3 border-2 border-dashed border-emerald-200/50 min-h-[250px] grid grid-rows-2 relative">
+                        <!-- AI River Area -->
+                        <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-start content-start border-b border-emerald-300/30 border-dashed pb-2">
+                            ${ai.river.map((t, i) => renderRiverTile(t, 'ai', i)).join('')}
+                        </div>
+                        <!-- Player River Area -->
+                        <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-start content-start pt-2">
+                            ${player.river.map((t, i) => renderRiverTile(t, 'player', i)).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fixed Replay Command Center -->
+            <div class="fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
+                <div class="max-w-4xl mx-auto w-full px-2 pb-[env(safe-area-inset-bottom,1rem)]">
+                    
+                    <div class="pointer-events-auto">
+                        ${insightHtml}
+                    </div>
+
+                    <div class="bg-white/95 backdrop-blur-md border border-white/50 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] rounded-t-3xl p-3 pointer-events-auto">
+                        
+                        <!-- Player Hand -->
+                        <div class="flex flex-wrap gap-1 mb-2 justify-start overflow-x-auto hide-scrollbar">
+                            ${renderOpenMelds(player.open)}
+                        </div>
+                        <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-center mb-4">
+                            ${player.closed.map(t => renderTile(t, { size: 'xs', extraClasses: 'opacity-80' })).join('')}
+                        </div>
+
+                        <!-- Playback Controls -->
+                        <div class="flex flex-col gap-2">
+                            <input type="range" id="replay-slider" min="0" max="${fullTrajectory.length}" value="${stepIndex}" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                            
+                            <div class="flex justify-center gap-3 mt-2">
+                                <button class="replay-btn bg-gray-100 hover:bg-gray-200 text-gray-700 p-3 rounded-full transition active:scale-95" data-action="start">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
+                                </button>
+                                <button class="replay-btn bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded-full transition active:scale-95 border border-blue-100" data-action="prev">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                                </button>
+                                <button class="replay-btn bg-blue-50 hover:bg-blue-100 text-blue-600 p-3 rounded-full transition active:scale-95 border border-blue-100" data-action="next">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                                </button>
+                                <button class="replay-btn bg-gray-100 hover:bg-gray-200 text-gray-700 p-3 rounded-full transition active:scale-95" data-action="end">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
             </div>
         </div>
     `;
 
-    document.querySelectorAll('.kan-opt-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const index = parseInt(e.currentTarget.dataset.index);
-            modalEl.innerHTML = '';
-            executeKanSelf(options[index]);
-        });
+    // Event Listeners
+    document.getElementById('exit-replay-btn').addEventListener('click', () => {
+        vsGameState.isReplaying = false;
+        renderVsArena(); // Go back to game over screen
     });
 
-    document.getElementById('close-kan-modal').addEventListener('click', () => {
-        modalEl.innerHTML = '';
+    const slider = document.getElementById('replay-slider');
+    slider.addEventListener('input', (e) => {
+        vsGameState.replayStep = parseInt(e.target.value);
+        renderReplayStep(vsGameState.replayStep);
+    });
+
+    document.querySelectorAll('.replay-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const action = e.currentTarget.dataset.action;
+            let newStep = vsGameState.replayStep;
+            
+            if (action === 'start') newStep = 0;
+            else if (action === 'prev') newStep = Math.max(0, newStep - 1);
+            else if (action === 'next') newStep = Math.min(fullTrajectory.length, newStep + 1);
+            else if (action === 'end') newStep = fullTrajectory.length;
+
+            if (newStep !== vsGameState.replayStep) {
+                vsGameState.replayStep = newStep;
+                renderReplayStep(vsGameState.replayStep);
+            }
+        });
     });
 }
+
 

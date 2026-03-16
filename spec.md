@@ -1,9 +1,9 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.5.0)
+# Taiwan Mahjong Trainer - Project Specification (v1.6.0)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
 
-Beyond isolated efficiency training, the app features a full 1-on-1 AI Arena to simulate real game conditions including calling mechanics and endgame pressure.
+Beyond isolated efficiency training, the app features a full 1-on-1 AI Arena to simulate real game conditions including calling mechanics and endgame pressure, along with a comprehensive Replay (覆盤) system for post-game analysis.
 
 ## 2. Technology Stack
 *   **Frontend Environment:** Vanilla JavaScript (ES6+ modules), HTML5.
@@ -20,17 +20,14 @@ Beyond isolated efficiency training, the app features a full 1-on-1 AI Arena to 
 ## 3. Core Features
 
 ### A. Dashboard & Statistics
-*   **Accuracy Tracking:** Tracks the percentage of times the user selects the mathematically optimal discard.
-*   **Tests Done:** Total number of decisions made.
-*   **Current & Max Streaks:** Tracks consecutive strings of correct discards.
-*   **Average Time:** Tracks the average time (in seconds) it takes to make a discard (can be toggled in settings).
-*   **Visual Tiers:** Stats change colors dynamically based on performance (e.g., Accuracy turns Red below 50%, Emerald above 75%, Golden above 90%).
+*   **Training Stats:** Tracks Accuracy, Tests Done, Current/Max Streaks, and Average Time.
+*   **AI Arena Stats:** Tracks Win Rate (color-coded), Deal-in (出銃) rate (excluding AI Tsumo), and total matches played.
 *   **Data Management:** Users can reset all statistics via the "Clear History" option in the global "..." menu.
 
 ### B. History Tracking
-*   **Past Tests:** The app seamlessly records up to the last 500 decisions, saving the hand, user choice, correctness, and time spent.
-*   **History View:** Accessible via the global menu. Displays a scrollable feed of past hands with clear "CORRECT" or "WRONG" badges.
-*   **Review Mode:** Clicking any past record card instantly loads that specific hand into the Sandbox Calculator for in-depth analysis of the missed optimal discards.
+*   **Dual-Tab Interface:** Separates "Training" history from "AI Arena" history.
+*   **Training History:** Records up to the last 500 decisions, saving the hand, user choice, correctness, and time spent. Clicking a card loads it into the Sandbox Calculator.
+*   **AI Matches History:** Records the last 50 full 1-on-1 AI matches on a FIFO basis, saving the complete trajectory, seed, timestamp, and winner. Clicking a match card loads it directly into Replay Mode.
 
 ### C. Training Mode (最大機率打法練習)
 *   **Objective:** The user is presented with a random, valid Mahjong hand. They must select the tile to discard that gives them the highest number of acceptable drawn tiles to advance their hand.
@@ -40,62 +37,57 @@ Beyond isolated efficiency training, the app features a full 1-on-1 AI Arena to 
     *   **Record Time Taken:** Toggles whether the decision time is logged to the dashboard's "Average Time" stat.
     *   **Display Live Timer:** Toggles a live `0.0s` clock in the header during the game.
 *   **Feedback:** Analyzes the discard, showing:
-    *   The user's resulting Shanten (向聽) and Acceptance (進張).
+    *   The user's resulting Shanten (向聽) and Acceptance (X款 Y張).
     *   If incorrect, it displays the optimal discard(s) below it for comparison.
     *   If correct (but multiple optimal moves exist), it shows a slider of the *other* optimal choices.
 *   **Share Functionality:** Generates a custom URL with the exact hand state (e.g., `?hand=123m456p`) and copies it to the clipboard.
 
 ### D. AI對戰練習 (1-on-1 AI Arena)
 *   **Objective:** A full game simulation where the player plays against an AI bot in a 16-tile Taiwan Mahjong match.
+*   **Layout:** Utilizes a mobile-first "Central Table" design with shared rivers and fixed bottom player controls.
 *   **Full Mechanics:** Supports all standard Mahjong actions:
     *   **上 (Chi)**: Forming sequences from opponent discards.
     *   **碰 (Pon)**: Forming triplets from opponent discards.
     *   **槓 (Kan)**: Open Kan, Ankan (Closed), and Kakan (Added). 
-    *   **糊 (Ron) / 自摸 (Tsumo)**: Winning mechanics with full Shanten validation. Both actions utilize golden UI highlights.
+    *   **糊 (Ron) / 自摸 (Tsumo)**: Winning mechanics with full Shanten validation.
 *   **AI Settings:**
     *   **Difficulty (難度):** Expert (Perfect efficiency), Beginner (Suboptimal moves), Random (Random discards).
     *   **Play Style (打法風格):** Aggressive (Calls to improve hand), Balanced (Calls to improve hand), Defensive (Calls only if discard is 100% safe).
-    *   **Show AI State (顯示AI叫糊狀態):** Toggles dynamic badges showing the AI's exact Shanten count (X向聽) or a pulsing red "叫糊" badge when waiting. Hides automatically upon game over.
-    *   **AI Speed Mode (極速AI模式):** Toggles between a 1-second "human-like" delay for AI actions (default) or instant execution (0ms) for speed training.
+    *   **Show AI State (顯示AI叫糊狀態):** Toggles dynamic badges showing the AI's exact state (-1=胡牌, 0=叫糊, >0=X向聽).
+    *   **AI Speed Mode (極速AI模式):** Toggles between a 1-second "human-like" delay for AI actions or instant execution (0ms).
+    *   **Match Seed:** Configurable numeric seed to guarantee deterministic draws.
 *   **Advanced Features:**
     *   **Strict Improvement Rule:** The AI will never make a "sideways" call (like kuikae) that locks its hand without mathematical benefit. A call MUST lower Shanten OR increase total tile acceptance.
+    *   **Kuikae (Forbidden Discard):** Both the player and AI are physically prevented from immediately discarding a tile they just claimed via a Chi or Pon.
     *   **Defensive Safety Logic:** When set to Defensive, the AI will prioritize discarding tiles that exist in the player's river or have been explicitly stolen from the player, ensuring it does not deal into a Ron.
-    *   **Expert MC Logic:** The Expert AI uses internal Monte Carlo simulations for endgame hands (8 or fewer tiles, running up to 5 draws deep) to evaluate the best long-term discard, rigorously avoiding backward Shanten jumps.
-    *   **Undo (悔棋):** Step back to previous moves to correct mistakes or test different strategies.
-    *   **Seeded Matches:** Every game has a unique numeric seed (with a one-click copy button), allowing matches to be perfectly reproduced and shared.
-    *   **Accurate Melds:** Open melds correctly reflect standard rules by displaying the "stolen" tile visually in the center of the set (e.g., placing the called `4s` between a `5s` and `6s` in a Chi).
-    *   **Realism:** AI Ankan tiles remain hidden until game-over or manual "Show Hand" toggle.
+    *   **Expert MC Logic:** The Expert AI uses internal Monte Carlo simulations for endgame hands (8 or fewer tiles) to evaluate the highest win-rate discard.
+    *   **Undo (悔棋):** Step back up to 50 previous moves to correct mistakes or test different strategies.
 
-### E. Monte Carlo Simulation Mode (蒙地卡羅演算法)
+### E. 覆盤 (Match Replay & Analysis Mode)
+*   **Objective:** A post-game mode allowing users to scrub through a completed AI Arena match to analyze both player and AI decisions turn-by-turn.
+*   **Functionality:**
+    *   Accessed via the "覆盤" button on the Game Over screen or by clicking an old match in the History tab.
+    *   **Omniscience:** The AI's hand is permanently revealed face-up.
+    *   **Timeline Scrubbing:** Users can use a slider or Next/Prev buttons to fast-forward or rewind the exact state of the board at any given step.
+    *   **AI Thoughts Panel:** Whenever the current timeline step is an AI discard, a frosted-glass panel reveals exactly why the AI made that move.
+    *   **"Before ➡️ After" Comparison:** Displays the exact Shanten, Wait Types (款), and Tile Count (張) *before* the AI made its move compared to *after* its chosen discard, complete with dynamic green/red color coding to highlight mathematical improvements or regressions.
+    *   **Decision Breakdown:** Lists the top alternative tiles the AI considered alongside their respective DP stats (X款 Y張) or Monte Carlo Win Rates (%).
+
+### F. Monte Carlo Simulation Mode (蒙地卡羅演算法)
 *   **Objective:** A deep-dive analytical mode to simulate thousands of future draws based on a specific discard. It evaluates the absolute best long-term outcome rather than just the immediate 1-step acceptance.
 *   **Mechanics:**
     *   Simulates drawing and discarding repeatedly until a Win (-1 Shanten) or the max draw limit is reached.
-    *   The bot uses a selectable policy (Greedy or Random) to play out the simulation.
-    *   **Context-Aware Simulation:** The engine automatically detects "dead" tiles from the board (e.g., rivers and open melds in AI Arena) and subtracts them from the remaining wall prior to simulation, ensuring precise real-world probabilities.
-*   **Settings Modal:**
-    *   **Hand Sizes:** 5, 8, 11, 14, and 17 tiles.
-    *   **Tile Pool:** Option to include or exclude Winds & Dragons. **Defaults to On**.
-    *   **Bot Policy:** Choose between **最大機率 (Greedy)** (bot plays optimally) or **隨機 (Random)** (bot plays poorly).
-    *   **Max Draws:** The limit of turns simulated per run (3, 5, 7, or 10 draws).
-    *   **Iterations:** The number of times the simulation is run (100, 1,000, 5,000, or 10,000 runs).
-*   **Performance (Multi-Threading):** 
-    *   Utilizes a **Web Worker Pool** (`mcWorker.js`) to offload heavy DP calculations from the main thread.
-    *   Spawns multiple workers dynamically based on the device's CPU cores (`navigator.hardwareConcurrency`) to execute runs in parallel, drastically reducing calculation time.
-    *   Employs an **In-Worker State Cache** to memorize optimal moves for previously seen hand configurations during a simulation, providing a massive speed boost.
-*   **Results Display:**
-    *   **Win Rate:** Percentage of runs that reached a winning hand.
-    *   **Reached Tenpai:** Percentage of runs that successfully built a ready hand (or won).
-    *   **Average Draws:** Average turns required to win.
-    *   **Top 20 Final Hands:** A detailed breakdown of the exact shapes the hand ended in, sorted by occurrence count and resulting Shanten, complete with exact probabilities and frequency counts.
-    *   **Rerun:** Users can trigger a fresh background simulation bypassing the local cache to re-verify stochastic results.
+    *   **Context-Aware Simulation:** The engine automatically detects "dead" tiles from the board (e.g., rivers and open melds in AI Arena) and subtracts them from the remaining wall prior to simulation.
+*   **Settings Modal:** Hand Sizes, Tile Pool, Bot Policy (Greedy or Random), Max Draws, and Iterations.
+*   **Performance:** Uses a Web Worker Pool (`mcWorker.js`) to run parallel simulations without freezing the UI, utilizing an In-Worker State Cache for speed.
+*   **Results:** Displays Win Rate, Tenpai Rate, Avg Draws, and a breakdown of the Top 20 Final Hands achieved.
 
-### F. Calculator Mode (進張計算機)
+### G. Calculator Mode (進張計算機)
 *   **Objective:** A sandbox mode for testing custom hands.
 *   **Functionality:** 
     *   Users can freely click tiles in generated hands to see their exact discard stats without affecting their dashboard Accuracy.
-    *   **Edit Hand:** A visual tile keyboard allows users to manually construct hands (up to 17 tiles) to analyze specific real-world scenarios. Includes a "Clear All" utility.
-    *   **To Monte Carlo:** A quick-action button allows seamless transition of the hand state into the Monte Carlo Simulation mode for deeper analysis.
-    *   Shared URLs automatically open in this mode to prevent skewing the recipient's training stats.
+    *   **Edit Hand:** A visual tile keyboard allows manual construction of hands (up to 17 tiles).
+    *   **To Monte Carlo:** A quick-action button seamlessly transitions the hand state into MC mode.
 
 ## 4. Application Architecture & Folder Structure
 
