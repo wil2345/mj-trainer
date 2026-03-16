@@ -186,7 +186,7 @@ function initApp() {
 
                 <div class="flex items-center gap-2 mb-2">
                     <h2 class="text-2xl font-bold text-gray-800 text-center">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.4.1</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">v1.5.0</span>
                 </div>
                 <p class="text-gray-500 mb-6 text-center text-sm">Improve your discard efficiency and tile recognition.</p>
                 
@@ -332,6 +332,7 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
     let tempAiStyle = currentGameState.aiStyle || 'aggressive';
     let tempShowAiTenpai = currentGameState.showAiTenpai || false;
     let tempAiSpeedMode = currentGameState.aiSpeedMode || false;
+    let tempSeed = isVsMode ? (vsGameState.currentSeed || '') : '';
 
     const activeColorClass = isMCMode ? 'bg-purple-500' : (isCalculator ? 'bg-blue-500' : (isVsMode ? 'bg-orange-500' : 'bg-mj-green'));
     const sizes = [5, 8, 11, 14, 17];
@@ -372,6 +373,18 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
 
                     ${isVsMode ? `
                     <div>
+                        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Match Seed</p>
+                        <div class="relative mb-4">
+                            <input type="number" id="settings-seed-input" step="1"
+                                class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 font-mono focus:border-orange-500 focus:outline-none transition-colors pr-10"
+                                placeholder="Leave blank for random" value="${tempSeed}">
+                            <button id="settings-copy-seed-btn" class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-orange-500 transition" title="Copy Seed">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                </svg>
+                            </button>
+                        </div>
+
                         <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">AI Settings</p>
                         <div class="grid grid-cols-1 gap-3 border border-gray-100 dark:border-gray-700 rounded-xl p-3 bg-gray-50/50 dark:bg-gray-800/50">
                             <div class="flex flex-col">
@@ -510,6 +523,20 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
     // --- Event Listeners ---
     document.getElementById('close-settings').addEventListener('click', () => { modalEl.innerHTML = ''; });
 
+    if (isVsMode) {
+        const copySeedBtn = document.getElementById('settings-copy-seed-btn');
+        if (copySeedBtn) {
+            copySeedBtn.addEventListener('click', () => {
+                const input = document.getElementById('settings-seed-input');
+                navigator.clipboard.writeText(input.value).then(() => {
+                    const originalHtml = copySeedBtn.innerHTML;
+                    copySeedBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
+                    setTimeout(() => copySeedBtn.innerHTML = originalHtml, 2000);
+                });
+            });
+        }
+    }
+
     const honorsWrapper = document.getElementById('modal-honors-toggle-wrapper');
     if (honorsWrapper) {
         honorsWrapper.addEventListener('click', () => {
@@ -567,15 +594,22 @@ function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = false) {
 
     document.getElementById('apply-settings').addEventListener('click', () => {
         if (isVsMode) {
+            const seedInput = document.getElementById('settings-seed-input');
+            const parsedSeed = seedInput ? parseInt(seedInput.value) : NaN;
+
             currentGameState.aiDifficulty = tempAiDifficulty;
             currentGameState.aiStyle = tempAiStyle;
             currentGameState.showAiTenpai = tempShowAiTenpai;
             currentGameState.aiSpeedMode = tempAiSpeedMode;
             modalEl.innerHTML = '';
-            if (isUpdate) {
+
+            if (!isNaN(parsedSeed) && parsedSeed !== vsGameState.currentSeed) {
+                // If the user entered a valid new seed, always start a new game with it
+                startVsMode(parsedSeed);
+            } else if (isUpdate) {
                 renderVsArena(); // Refresh labels
             } else {
-                startVsMode(); // Fresh game
+                startVsMode(isNaN(parsedSeed) ? null : parsedSeed); // Fresh game
             }
             return;
         }
@@ -1794,12 +1828,15 @@ function renderVsArena() {
     const appContainer = document.getElementById('app');
     const { player, ai, wall, currentTurn, isGameOver, winner, pendingAction, showAiHand, latestDiscard } = vsGameState;
 
-    const renderRiver = (river, owner) => river.map((t, idx) => {
+    // Remove app container padding for full-height fixed layout
+    appContainer.classList.remove('p-4');
+    appContainer.classList.add('p-0');
+
+    const renderRiverTile = (t, owner, idx) => {
         const isLatest = latestDiscard && latestDiscard.owner === owner && latestDiscard.index === idx;
-        const size = isLatest ? 'sm' : 'xs';
-        const extraClasses = isLatest ? 'ring-2 ring-blue-500 shadow-md transform -translate-y-1' : 'opacity-80';
-        return renderTile(t, { size, extraClasses });
-    }).join('');
+        const extraClasses = isLatest ? 'ring-2 ring-blue-500 shadow-md transform -translate-y-0.5 z-10 scale-110' : 'opacity-90';
+        return renderTile(t, { size: 'xs', extraClasses });
+    };
 
     const renderOpenMelds = (melds, isAi = false) => melds.map(meld => {
         const isAnkan = !Array.isArray(meld) && meld.isClosed;
@@ -1807,175 +1844,166 @@ function renderVsArena() {
         // Reveal if it's not Ankan, or if it IS Ankan but showAiHand or isGameOver is true
         const shouldShow = !isAnkan || !isAi || showAiHand || isGameOver;
         return `
-            <div class="flex border border-gray-200 rounded p-0.5 bg-gray-50 w-fit justify-center gap-0.5">      
+            <div class="flex border border-gray-200 rounded-md p-0.5 bg-gray-50/50 w-fit justify-center gap-0.5 shadow-sm">      
                 ${tiles.map(t => renderTile(t, { size: 'xs', faceDown: !shouldShow })).join('')}
             </div>
         `;
-        }).join('');
+    }).join('');
+
     const aiShanten = calculateShanten(ai.closed, ai.open.length);
     
     // Check for player's self-actions (Ankan/Kakan/Tsumo) during their turn
     let turnActions = [];
     if (currentTurn === 'player' && !isGameOver && !pendingAction && player.closed.length % 3 === 2) {
-        if (isWinningHand(player.closed, player.open.length)) {
-            turnActions.push({ type: 'tsumo', label: '自摸' });
-        }
-        const kanOpts = getClosedKanOptions(player.closed, player.open);
-        if (kanOpts.length > 0) {
-            turnActions.push({ type: 'kan_self', label: '槓', options: kanOpts });
+        const lastAction = vsGameState.trajectory.length > 0 ? vsGameState.trajectory[vsGameState.trajectory.length - 1] : null;
+        const playerJustDrew = lastAction && (lastAction.action === 'draw' || lastAction.action === 'draw_replacement');
+
+        if (playerJustDrew) {
+            if (isWinningHand(player.closed, player.open.length)) {
+                turnActions.push({ type: 'tsumo', label: '自摸' });
+            }
+            const kanOpts = getClosedKanOptions(player.closed, player.open);
+            if (kanOpts.length > 0) {
+                turnActions.push({ type: 'kan_self', label: '槓', options: kanOpts });
+            }
         }
     }
 
     appContainer.innerHTML = `
-        <!-- AI Action Notification (Phone Style) -->
-        ${vsGameState.aiActionMessage ? `
-            <div class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] animate-slide-down">
-                <div class="bg-gray-900/90 backdrop-blur text-white px-6 py-2.5 rounded-full shadow-2xl flex items-center gap-3 border border-white/10 ring-4 ring-black/5">
-                    <div class="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">AI</div>
-                    <span class="font-bold tracking-wider text-sm">${vsGameState.aiActionMessage}</span>
-                </div>
-            </div>
-        ` : ''}
-
-        <div class="flex flex-col items-center justify-start h-full max-w-4xl mx-auto mt-2 px-2 pb-10">
-            <!-- Header -->
-            <div class="w-full flex justify-between items-center mb-3">
-                <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h.01M15 9h.01M8 13h8" />
-                    </svg>
-                    AI對戰練習
-                </h2>
-                <div class="flex items-center gap-2">
-                    <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-2 py-1.5 rounded-lg border border-gray-100">
-                        Wall: ${wall.length}
-                    </div>
-                    <button id="vs-rollback-btn" class="text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 border border-blue-100 flex items-center gap-1 px-2 py-1.5 rounded transition disabled:opacity-30 disabled:cursor-not-allowed" title="Rollback Move (悔棋)" ${vsGameState.historyStack.length === 0 ? 'disabled' : ''}>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                        </svg>
-                        <span class="hidden sm:inline">Undo</span>
-                    </button>
-                    <button id="vs-seed-btn" class="text-xs font-medium text-purple-600 hover:text-purple-800 bg-purple-50 border border-purple-100 flex items-center gap-1 px-2 py-1.5 rounded transition" title="Match Seed">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m0 0a2 2 0 01-2 2m0-4a2 2 0 01-2-2m0 0a2 2 0 012-2m0 4v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2M9 5a2 2 0 114 0" />
-                        </svg>
-                        <span class="hidden sm:inline">Seed: ${vsGameState.currentSeed}</span>
-                    </button>
-                    <button id="vs-settings-btn" class="text-xs font-medium text-orange-600 hover:text-orange-800 bg-orange-50 border border-orange-100 flex items-center gap-1 px-2 py-1.5 rounded transition" title="Settings">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <span class="hidden sm:inline">Settings</span>
-                    </button>
-                    <button id="vs-back-btn" class="text-xs font-medium text-gray-500 hover:text-gray-800 flex items-center gap-1 bg-gray-100 px-2 py-1.5 rounded transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                        </svg>
-                        <span class="hidden sm:inline">Back</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- AI Area -->
-            <div class="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-2">
-                <div class="flex justify-between items-center mb-2">
-                    <div class="flex items-center gap-2">
-                        <div class="w-6 h-6 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-[10px] font-bold">AI</div>
-                        ${(currentGameState.showAiTenpai && !isGameOver) ? (
-                            aiShanten === 0 
-                            ? '<span class="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded animate-pulse shadow-sm">叫糊</span>' 
-                            : `<span class="bg-gray-400 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm">${aiShanten}向聽</span>`
-                        ) : ''}
-                    </div>
-                    
-                    <div class="flex items-center gap-2">
-                        <button id="toggle-ai-hand-btn" class="text-[10px] font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded transition whitespace-nowrap">
-                            ${showAiHand ? 'Hide Hand' : 'Show Hand'}
-                        </button>
-                        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">${ai.closed.length} Tiles</span>
-                    </div>
-                </div>
+        <div class="flex flex-col h-screen overflow-hidden bg-gray-100 relative">
+            
+            <!-- Scrollable Content (Header + AI + Rivers) -->
+            <div class="flex-grow overflow-y-auto pb-52 pt-2 px-2 hide-scrollbar" id="vs-scroll-area">
                 
-                <div class="flex flex-wrap gap-1 min-h-[24px] max-w-full mb-2" id="ai-open-melds">
-                    ${renderOpenMelds(ai.open, true)}
-                </div>
-                
-                <!-- AI Hand -->
-                <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-center mb-2" id="ai-hand-container">
-                    ${ai.closed.map(t => renderTile(t, { size: 'xs', faceDown: !showAiHand && !isGameOver })).join('')}
-                </div>
-                <!-- AI River -->
-                <div class="flex flex-wrap gap-1 min-h-[40px] bg-gray-50 rounded-lg p-2 justify-start items-end">
-                    ${renderRiver(ai.river, 'ai')}
-                </div>
-            </div>
-
-            <!-- Action Center -->
-            <div class="w-full flex flex-col items-center justify-center py-4 relative min-h-[60px]">
-                <div id="vs-action-buttons" class="flex gap-2">
-                    ${pendingAction ? `
-                        ${pendingAction.actions.map(action => `
-                            <button class="vs-action-btn ${action.type === 'ron' ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-mj-green hover:bg-emerald-600'} text-white font-black px-5 py-2 rounded-lg shadow-md transition active:scale-95" data-type="${action.type}">
-                                ${action.label}
-                            </button>
-                        `).join('')}
-                        <button id="vs-skip-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold px-5 py-2 rounded-lg shadow-sm transition active:scale-95">
-                            Skip
+                <!-- Header (Compact) -->
+                <div class="max-w-4xl mx-auto flex justify-between items-center mb-2 px-1">
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-xs font-black text-gray-700 uppercase tracking-tighter flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h.01M15 9h.01M8 13h8" />
+                            </svg>
+                            ${currentGameState.mode}
+                        </h2>
+                        <div class="text-[9px] font-bold text-gray-400 bg-white px-1.5 py-0.5 rounded border border-gray-200">W: ${wall.length}</div>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <button id="vs-rollback-btn" class="p-1.5 rounded-lg bg-white border border-gray-200 text-blue-600 disabled:opacity-30 transition-all active:scale-90 shadow-sm" title="Undo" ${vsGameState.historyStack.length === 0 ? 'disabled' : ''}>
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
                         </button>
-                    ` : ''}
-                    
-                    ${turnActions.length > 0 ? `
-                        ${turnActions.map(action => `
-                            <button class="vs-turn-action-btn ${action.type === 'tsumo' ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-mj-green hover:bg-emerald-600'} text-white font-black px-5 py-2 rounded-lg shadow-md transition active:scale-95" data-type="${action.type}">
-                                ${action.label}
-                            </button>
-                        `).join('')}
-                    ` : ''}
+                        <button id="vs-settings-btn" class="p-1.5 rounded-lg bg-white border border-gray-200 text-orange-600 active:scale-90 shadow-sm" title="Settings">
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /></svg>
+                        </button>
+                        <button id="vs-back-btn" class="p-1.5 rounded-lg bg-white border border-gray-200 text-gray-400 active:scale-90 shadow-sm" title="Back">
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                        </button>
+                    </div>
                 </div>
 
-                ${isGameOver ? `
-                    <div class="flex flex-col items-center">
-                        <div class="bg-yellow-400 text-white font-black px-6 py-2 rounded-full shadow-lg animate-bounce mt-2">
-                            ${winner === 'player' ? 'YOU WIN!' : (winner === 'ai' ? 'AI WINS!' : 'DRAW (流局)')}
+                <!-- AI Section (Super Compact) -->
+                <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-2 mb-2">
+                    <div class="flex justify-between items-center mb-1.5 px-1">
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-4 h-4 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 text-[8px] font-black">AI</div>
+                            ${(currentGameState.showAiTenpai && !isGameOver) ? (
+                                aiShanten === 0 
+                                ? '<span class="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded animate-pulse">叫糊</span>' 
+                                : `<span class="bg-gray-400 text-white text-[8px] font-bold px-1.5 py-0.5 rounded">${aiShanten}向聽</span>`
+                            ) : ''}
                         </div>
-                        <button id="vs-restart-btn" class="mt-4 bg-mj-green text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-emerald-600 transition">
-                            Play Again
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button id="toggle-ai-hand-btn" class="text-[8px] font-black text-gray-400 uppercase tracking-tighter hover:text-gray-600 transition">
+                                ${showAiHand ? 'Hide' : 'Show'} Hand
+                            </button>
+                            <span class="text-[8px] font-bold text-gray-300 uppercase tracking-widest">${ai.closed.length} T</span>
+                        </div>
                     </div>
-                ` : ''}
-            </div>
+                    
+                    <div class="flex flex-wrap gap-0.5 justify-center mb-2">
+                        ${ai.closed.map(t => renderTile(t, { size: 'xs', faceDown: !showAiHand && !isGameOver })).join('')}
+                    </div>
 
-            <!-- Player River -->
-            <div class="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-2">
-                <div class="flex flex-wrap gap-1 min-h-[40px] bg-gray-50 rounded-lg p-2 justify-start items-start">
-                    ${renderRiver(player.river, 'player')}
+                    <div class="flex flex-wrap gap-1 justify-start overflow-x-auto hide-scrollbar" id="ai-open-melds">
+                        ${renderOpenMelds(ai.open, true)}
+                    </div>
+                </div>
+
+                <!-- Central Table (Combined Rivers) -->
+                <div class="max-w-4xl mx-auto">
+                    <div class="bg-emerald-800/10 rounded-2xl p-2 sm:p-3 border-2 border-dashed border-emerald-200/50 min-h-[300px] grid grid-rows-2 relative">
+                        <!-- AI River Area -->
+                        <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-start content-start border-b border-emerald-300/30 border-dashed pb-2">
+                            ${ai.river.map((t, i) => renderRiverTile(t, 'ai', i)).join('')}
+                        </div>
+                        
+                        <!-- Player River Area -->
+                        <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-start content-start pt-2">
+                            ${player.river.map((t, i) => renderRiverTile(t, 'player', i)).join('')}
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Player Area -->
-            <div class="w-full bg-white rounded-xl shadow-md border-t-4 border-orange-500 p-3">
-                <div class="flex justify-between items-center mb-2">
-                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your Hand</span>
-                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">${player.closed.length} Tiles</span>
-                </div>
-                
-                <div class="flex flex-wrap gap-1 min-h-[24px] max-w-full mb-3" id="player-open-melds">
-                    ${renderOpenMelds(player.open)}
-                </div>
+            <!-- Fixed Player Command Center -->
+            <div class="fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
+                <div class="max-w-4xl mx-auto w-full px-2 pb-[env(safe-area-inset-bottom,1rem)]">
+                    
+                    <!-- Floating Actions Overlay -->
+                    <div class="flex flex-col items-center gap-2 mb-3 pointer-events-auto">
+                        ${pendingAction ? `
+                            <div class="flex gap-2 animate-fade-in-up">
+                                ${pendingAction.actions.map(action => `
+                                    <button class="vs-action-btn ${action.type === 'ron' ? 'bg-yellow-500 ring-4 ring-yellow-200' : 'bg-mj-green ring-4 ring-emerald-100'} text-white font-black px-6 py-3 rounded-xl shadow-xl transition active:scale-95 text-sm uppercase tracking-wider" data-type="${action.type}">
+                                        ${action.label}
+                                    </button>
+                                `).join('')}
+                                <button id="vs-skip-btn" class="bg-white text-gray-700 font-bold px-6 py-3 rounded-xl shadow-xl transition active:scale-95 border border-gray-200 text-sm uppercase tracking-wider">
+                                    Skip
+                                </button>
+                            </div>
+                        ` : ''}
+                        
+                        ${turnActions.length > 0 ? `
+                            <div class="flex gap-2 animate-fade-in-up">
+                                ${turnActions.map(action => `
+                                    <button class="vs-turn-action-btn ${action.type === 'tsumo' ? 'bg-yellow-500 ring-4 ring-yellow-200' : 'bg-mj-green ring-4 ring-emerald-100'} text-white font-black px-6 py-3 rounded-xl shadow-xl transition active:scale-95 text-sm uppercase tracking-wider" data-type="${action.type}">
+                                        ${action.label}
+                                    </button>
+                                `).join('')}
+                            </div>
+                        ` : ''}
 
-                <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-center" id="vs-hand-container">
-                    ${player.closed.map((t, i) => renderTile(t, { 
-                        size: 'sm', 
-                        id: `vs-tile-${i}`,
-                        extraClasses: currentTurn === 'player' && !isGameOver && !pendingAction ? 'hover:-translate-y-2 cursor-pointer transition-transform' : 'opacity-50 cursor-default'
-                    })).join('')}
+                        ${isGameOver ? `
+                            <div class="bg-white p-4 rounded-2xl shadow-2xl border border-gray-100 flex flex-col items-center animate-fade-in-up">
+                                <div class="bg-yellow-400 text-white font-black px-6 py-2 rounded-full shadow-lg mb-3">
+                                    ${winner === 'player' ? 'YOU WIN!' : (winner === 'ai' ? 'AI WINS!' : 'DRAW (流局)')}
+                                </div>
+                                <button id="vs-restart-btn" class="bg-mj-green text-white px-8 py-2.5 rounded-xl font-bold shadow-md hover:bg-emerald-600 transition w-full">
+                                    Play Again
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <!-- Player Hand & Melds (Frosted Glass Card) -->
+                    <div class="bg-white/95 backdrop-blur-md border border-white/50 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] rounded-t-3xl p-3 pointer-events-auto transition-all">
+                        <div class="flex flex-wrap gap-1 mb-2 justify-start overflow-x-auto hide-scrollbar" id="player-open-melds">
+                            ${renderOpenMelds(player.open)}
+                        </div>
+
+                        <div class="flex flex-wrap gap-0.5 sm:gap-1 justify-center" id="vs-hand-container">
+                            ${player.closed.map((t, i) => renderTile(t, { 
+                                size: 'sm', 
+                                id: `vs-tile-${i}`,
+                                extraClasses: currentTurn === 'player' && !isGameOver && !pendingAction ? 'hover:-translate-y-4 active:-translate-y-6 cursor-pointer transition-all duration-200' : 'opacity-40 cursor-default grayscale-[0.5]'
+                            })).join('')}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     `;
 
+    // Re-bind all listeners since innerHTML was replaced
     document.getElementById('vs-back-btn').addEventListener('click', () => {
         if (confirm('Exit the current game?')) initApp();
     });
@@ -2010,7 +2038,6 @@ function renderVsArena() {
         document.getElementById('vs-restart-btn').addEventListener('click', () => startVsMode());
     }
 
-    // Action Center Button Handlers
     if (pendingAction) {
         document.getElementById('vs-skip-btn').addEventListener('click', () => {
             vsGameState.pendingAction = null;
@@ -2025,7 +2052,6 @@ function renderVsArena() {
         });
     }
 
-    // --- ADDED: Turn Actions (Ankan/Kakan) ---
     document.querySelectorAll('.vs-turn-action-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const type = e.currentTarget.dataset.type;
@@ -2151,11 +2177,27 @@ function executeChi(opt, tile) {
     vsGameState.trajectory.push({ actor: 'player', action: 'chi', tile });
     vsGameState.pendingAction = null;
     vsGameState.currentTurn = 'player';
+    vsGameState.forbiddenDiscard = tile; // Rule: Cannot discard stolen tile same turn
     renderVsArena();
 }
 
 function vsPlayerDiscard(index) {
     if (vsGameState.currentTurn !== 'player' || vsGameState.pendingAction) return;
+
+    const tileToDiscard = vsGameState.player.closed[index];
+    
+    // Kuikae Rule: Cannot discard the tile you just stole via Chi/Pon
+    if (vsGameState.forbiddenDiscard === tileToDiscard) {
+        // Find the tile element to briefly animate a shake or red border to indicate invalid move
+        const tileEl = document.getElementById(`vs-tile-${index}`);
+        if (tileEl) {
+            tileEl.classList.add('ring-4', 'ring-red-500', 'animate-shake');
+            setTimeout(() => {
+                tileEl.classList.remove('ring-4', 'ring-red-500', 'animate-shake');
+            }, 300);
+        }
+        return;
+    }
 
     saveVsSnapshot();
 
@@ -2164,9 +2206,13 @@ function vsPlayerDiscard(index) {
     vsGameState.latestDiscard = { owner: 'player', index: vsGameState.player.river.length - 1 };
     vsGameState.player.closed = sortHand(vsGameState.player.closed);
     vsGameState.trajectory.push({ actor: 'player', action: 'discard', tile: tile });
+    
+    // reset forbidden discard after successful discard
+    vsGameState.forbiddenDiscard = null;
 
     // Check if AI can steal
     if (checkAiInterrupt(tile)) return;
+
 
     vsGameState.currentTurn = 'ai';
     renderVsArena();

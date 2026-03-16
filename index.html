@@ -75,7 +75,7 @@
         </div>
     </header>
 
-    <main class="flex-grow p-4 container mx-auto" id="app">
+    <main class="flex-grow container mx-auto overflow-hidden" id="app">
         <!-- Main Application Content Will Be Injected Here via app.js -->
         <div class="flex items-center justify-center h-full">
             <p class="text-lg text-gray-500 animate-pulse">Loading Trainer...</p>
@@ -83,7 +83,7 @@
     </main>
 
     <!-- AI Action Notifications (Persistent Container) -->
-    <div id="vs-notification-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] pointer-events-none"></div>
+    <div id="vs-notification-container" class="fixed top-20 left-1/2 -translate-x-1/2 z-[100] pointer-events-none w-full flex justify-center px-4"></div>
 
     <!-- Update Toast (Hidden by default) -->
     <div id="update-toast" class="fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 transform translate-y-20 opacity-0 transition-all duration-300 z-50 pointer-events-none">
