@@ -170,3 +170,28 @@ Validating a Mahjong algorithm is difficult. Instead of only hand-writing tests,
 2.  **UI Edits:** Make changes directly in `index.html` or `src/js/app.js`. Tailwind classes are parsed dynamically by the CDN.
 3.  **Engine Edits:** If you touch `src/js/engine/shanten.js`, you **must** run the test suite to ensure no regressions occur in Shanten calculation. The DP logic is extremely sensitive.
 4.  **Generating More Tests:** Run `node scripts/scrapeTenhou.js` to fetch more edge cases if you encounter a bug in the engine. Ensure dependencies (`npm install`) are present first.
+
+## 8. Developer Workflow & Efficiency Guide
+
+For future developers picking up this project, here is the recommended mindset and methodology for efficiently debugging, tracing, and implementing features in this codebase.
+
+### A. Tracing State (The "Data Flow" Mindset)
+This app is fundamentally a state machine. Instead of trying to read DOM elements to figure out what is happening, always trace the data objects.
+*   **Two Core States:** You only need to care about `currentGameState` (for Training/Calc modes) and `vsGameState` (for the AI Arena). 
+*   **The Trajectory Pattern:** When debugging game logic (like "Why did the Tsumo button appear incorrectly?"), look at `vsGameState.trajectory`. It holds the precise history of actions (`[{actor: 'player', action: 'draw', tile: '1m'}, ...]`). Validating against this history is much safer than relying on arbitrary boolean flags.
+*   **Rule Enforcement:** Implement game rules (like Kuikae / forbidden discards) directly in the state (`vsGameState.forbiddenDiscard`) immediately after the action that triggers them (e.g., inside `executeChi`), and validate them at the entry point of the next action (`vsPlayerDiscard`).
+
+### B. Surgical Debugging & Implementation
+When tasked with adding a new feature or fixing a bug, avoid full rewrites. Use "surgical" techniques:
+*   **Locate via Constants:** Need to fix how a tile renders? Search for `TILE_NAMES` or `UNICODE_MAP` instead of blindly scrolling through HTML.
+*   **Isolate the Engine:** If you suspect an engine calculation is wrong (Shanten or Acceptance), do not debug it through the UI. Write a quick hardcoded test case in `tests/engine.test.js`, run `npm test`, and use Node's debugger. The UI only formats the engine's output.
+*   **Monte Carlo Debugging:** The MC engine runs in Web Workers. If it fails silently, the issue is almost always a data serialization problem between the main thread and `mcWorker.js` via `postMessage`. Ensure you are only passing standard arrays/objects, not DOM elements or complex class instances.
+
+### C. UI/UX Philosophy (Mobile-First Constraints)
+Taiwan Mahjong has massive physical constraints (up to 17 tiles in hand, dozens in the river). When designing UI, use the "Physical Table" mindset:
+*   **Calculate Maximums First:** Before adding a grid or a container, ask: "What is the absolute maximum number of items this will hold?" (e.g., 52 discards per player in a draw). Build the layout to handle that maximum without breaking the screen.
+*   **Fixed Overlays vs. Internal Scroll:** Internal scrollbars (`overflow-y-auto` on small divs) provide a poor touch experience. Instead, pin critical interaction areas (like the player's hand and action buttons) to the bottom of the screen (`position: fixed; bottom: 0`) and allow the central content (the rivers) to scroll naturally under them.
+*   **Leverage Tailwind Power:** Use `flex flex-wrap gap-x` instead of strict `grid` layouts for tiles. Tiles need to flow naturally based on the device width. Use `backdrop-blur` for overlays so users can still perceive the table context underneath.
+
+### D. The Golden Rule of Committing
+If you touch `src/js/engine/shanten.js` or `src/js/engine/mcWorker.js`, you **must** run `npm test` before considering the job done. The DP algorithm is heavily memoized; changing a single index can break evaluation trees for 17-tile hands while 14-tile hands appear to work fine. Trust the test suite.
