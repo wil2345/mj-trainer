@@ -1418,7 +1418,7 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                         </div>
                         <div class="w-px h-8 bg-gray-300 rounded"></div>
                         <div class="text-center min-w-[60px]">
-                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">鬲張</p>
+                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">進張</p>
                             <p class="text-xl font-black text-blue-500 tracking-tight">
                                 ${userMove.acceptedTiles.length}<span class="text-xs font-bold text-gray-400 mx-0.5">款</span>${userMove.acceptance}<span class="text-xs font-bold text-gray-400 mx-0.5">張</span>
                             </p>
@@ -1479,7 +1479,7 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                         </div>
                         <div class="w-px h-8 bg-gray-300 rounded"></div>
                         <div class="text-center min-w-[60px]">
-                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">鬲張</p>
+                            <p class="text-[10px] text-gray-500 font-bold mb-0.5">進張</p>
                             <p class="text-xl font-black text-blue-500 tracking-tight">
                                 ${userMove.acceptedTiles.length}<span class="text-xs font-bold text-gray-400 mx-0.5">款</span>${userMove.acceptance}<span class="text-xs font-bold text-gray-400 mx-0.5">張</span>
                             </p>
@@ -1512,7 +1512,7 @@ function renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator,
                                 </div>
                                 <div class="w-px h-8 bg-emerald-200 rounded"></div>
                                 <div class="text-center min-w-[60px]">
-                                    <p class="text-[10px] text-emerald-600 font-bold mb-0.5">鬲張</p>
+                                    <p class="text-[10px] text-emerald-600 font-bold mb-0.5">進張</p>
                                     <p class="text-xl font-black text-emerald-600 tracking-tight">
                                         ${bestMove.acceptedTiles.length}<span class="text-xs font-bold text-emerald-400 mx-0.5">款</span>${bestMove.acceptance}<span class="text-xs font-bold text-emerald-400 mx-0.5">張</span>
                                     </p>
@@ -2371,7 +2371,7 @@ function executeChi(opt, tile) {
     // Display stolen tile in the middle: [opt[0], stolen, opt[1]]
     // opt is already sorted from getChiOptions, so we just place tile in between
     vsGameState.player.open.push([opt[0], tile, opt[1]]);
-    vsGameState.trajectory.push({ actor: 'player', action: 'chi', tile });
+    vsGameState.trajectory.push({ actor: 'player', action: 'chi', tile, opt });
     vsGameState.pendingAction = null;
     vsGameState.currentTurn = 'player';
     vsGameState.forbiddenDiscard = tile; // Rule: Cannot discard stolen tile same turn
@@ -2494,7 +2494,7 @@ function checkAiInterrupt(tile) {
         const nextAnalysisRaw = getDiscardAnalysis(tempHand, nextOpenCount, deadTiles);
         const nextAnalysis = nextAnalysisRaw.filter(a => a.discard !== tile);
         
-        if (nextAnalysis.length === 0) return false;
+        if (nextAnalysis.length === 0) return { valid: false };
         
         const nextShanten = nextAnalysis[0].shanten;
         const nextAcceptance = nextAnalysis[0].acceptance;
@@ -2502,7 +2502,7 @@ function checkAiInterrupt(tile) {
         // A call MUST either be faster (lower shanten) OR result in more acceptance (better wait)
         const isImprovement = (nextShanten < currentShanten) || (nextShanten === currentShanten && nextAcceptance > currentAcceptance);
         
-        if (!isImprovement) return false;
+        if (!isImprovement) return { valid: false };
 
         if (currentGameState.aiStyle === 'defensive') {
             // Defensive AI ONLY makes a call if it can discard a 100% safe tile (already in player's river or stolen from player)
@@ -2514,18 +2514,18 @@ function checkAiInterrupt(tile) {
                 a.shanten === nextShanten && 
                 playerRiverPlusStolen.includes(a.discard)
             );
-            return hasSafeDiscard;
+            if (!hasSafeDiscard) return { valid: false };
         }
         
         // Aggressive & Balanced now both take any move that is a strict improvement
-        return true;
+        return { valid: true, shanten: nextShanten, acceptance: nextAcceptance };
     };
 
     // 2. Check AI Kan (Open)
     const kanOption = getKanOptions(vsGameState.ai.closed, tile);
     if (kanOption) {
         const tempHand = vsGameState.ai.closed.filter(t => t !== tile);
-        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1)) {
+        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1).valid) {
             vsGameState.ai.closed = sortHand(tempHand);
             vsGameState.ai.open.push([tile, tile, tile, tile]);
             vsGameState.trajectory.push({ actor: 'ai', action: 'kan', tile: tile });
@@ -2547,7 +2547,7 @@ function checkAiInterrupt(tile) {
         tempHand.splice(tempHand.indexOf(tile), 1);
         tempHand.splice(tempHand.indexOf(tile), 1);
         
-        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1)) {
+        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1).valid) {
             // AI Ponds
             vsGameState.ai.closed = sortHand(tempHand);
             vsGameState.ai.open.push([tile, tile, tile]);
@@ -2566,25 +2566,40 @@ function checkAiInterrupt(tile) {
 
     // 4. Check AI Chi (only because it's 1v1 and AI is always next)
     const chiOptions = getChiOptions(vsGameState.ai.closed, tile);
+    let bestChi = null;
+    let bestChiEval = null;
+
     for (let opt of chiOptions) {
         const tempHand = [...vsGameState.ai.closed];
         tempHand.splice(tempHand.indexOf(opt[0]), 1);
         tempHand.splice(tempHand.indexOf(opt[1]), 1);
         
-        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1)) {
-            // AI Chis
-            vsGameState.ai.closed = sortHand(tempHand);
-            // Display stolen tile in the middle: [opt[0], stolen, opt[1]]
-            vsGameState.ai.open.push([opt[0], tile, opt[1]]);
-            vsGameState.trajectory.push({ actor: 'ai', action: 'chi', tile: tile });
-            vsGameState.latestDiscard = null; // Clear latest discard since it was stolen
-            vsGameState.currentTurn = 'ai';
-            vsGameState.forbiddenDiscard = tile; // Rule: Cannot discard stolen tile same turn
-            showAiActionBubble('上');
-            renderVsArena(); // Show the new meld immediately
-            vsAiDiscard();
-            return true;
+        const evalResult = evaluateCall(tempHand, vsGameState.ai.open.length + 1);
+        if (evalResult.valid) {
+            if (!bestChiEval || evalResult.shanten < bestChiEval.shanten || (evalResult.shanten === bestChiEval.shanten && evalResult.acceptance > bestChiEval.acceptance)) {
+                bestChi = opt;
+                bestChiEval = evalResult;
+            }
         }
+    }
+
+    if (bestChi) {
+        const tempHand = [...vsGameState.ai.closed];
+        tempHand.splice(tempHand.indexOf(bestChi[0]), 1);
+        tempHand.splice(tempHand.indexOf(bestChi[1]), 1);
+        
+        // AI Chis
+        vsGameState.ai.closed = sortHand(tempHand);
+        // Display stolen tile in the middle: [opt[0], stolen, opt[1]]
+        vsGameState.ai.open.push([bestChi[0], tile, bestChi[1]]);
+        vsGameState.trajectory.push({ actor: 'ai', action: 'chi', tile: tile, opt: bestChi });
+        vsGameState.latestDiscard = null; // Clear latest discard since it was stolen
+        vsGameState.currentTurn = 'ai';
+        vsGameState.forbiddenDiscard = tile; // Rule: Cannot discard stolen tile same turn
+        showAiActionBubble('上');
+        renderVsArena(); // Show the new meld immediately
+        vsAiDiscard();
+        return true;
     }
 
     return false;
@@ -2772,7 +2787,7 @@ async function vsAiDiscard() {
     } else {
         bestMove = analysis[0].discard;
         analysisPayload = { 
-            type: 'dp', 
+            type: currentGameState.aiStyle === 'defensive' ? 'defensive' : 'dp', 
             options: analysis.slice(0, 3).map(m => ({ 
                 discard: m.discard, 
                 shanten: m.shanten, 
@@ -3065,29 +3080,29 @@ function renderReplayStep(stepIndex) {
                 vsGameState[actor].closed = sortHand(vsGameState[actor].closed);
                 break;
             case 'chi':
-                // For Replay, we don't have the exact opt array, but we can infer it or just know a tile was taken from the opponent's river
+                // For Replay, we try to use the exact opt array if saved in trajectory
                 // The actual stolen tile is t.tile. We remove it from the opponent's river (latest discard).
                 const oppChi = actor === 'player' ? 'ai' : 'player';
                 if (vsGameState.latestDiscard && vsGameState.latestDiscard.owner === oppChi) {
                     vsGameState[oppChi].river.pop();
                     vsGameState.latestDiscard = null;
                 }
-                // Just visually represent the meld - exact ordering doesn't matter as much for simple replay, but we try our best.
-                // We know t.tile was stolen. We need to remove two connecting tiles from closed.
-                // Simplified approach for Replay: just grab two connecting tiles.
-                let valChi = parseInt(t.tile[0]);
-                let suitChi = t.tile[1];
-                let c1 = null, c2 = null;
                 
-                // Try to find the exact tiles that were removed (this is tricky without saving the full opt array in trajectory)
-                // For perfect replay, we should really update trajectory to save the `opt` array. 
-                // For now, simple greedy inference:
-                if (vsGameState[actor].closed.includes(`${valChi-1}${suitChi}`) && vsGameState[actor].closed.includes(`${valChi+1}${suitChi}`)) {
-                    c1 = `${valChi-1}${suitChi}`; c2 = `${valChi+1}${suitChi}`;
-                } else if (vsGameState[actor].closed.includes(`${valChi-2}${suitChi}`) && vsGameState[actor].closed.includes(`${valChi-1}${suitChi}`)) {
-                    c1 = `${valChi-2}${suitChi}`; c2 = `${valChi-1}${suitChi}`;
-                } else if (vsGameState[actor].closed.includes(`${valChi+1}${suitChi}`) && vsGameState[actor].closed.includes(`${valChi+2}${suitChi}`)) {
-                    c1 = `${valChi+1}${suitChi}`; c2 = `${valChi+2}${suitChi}`;
+                let c1 = null, c2 = null;
+                if (t.opt && t.opt.length === 2) {
+                    c1 = t.opt[0];
+                    c2 = t.opt[1];
+                } else {
+                    // Fallback for older matches saved without `opt`
+                    let valChi = parseInt(t.tile[0]);
+                    let suitChi = t.tile[1];
+                    if (vsGameState[actor].closed.includes(`${valChi-1}${suitChi}`) && vsGameState[actor].closed.includes(`${valChi+1}${suitChi}`)) {
+                        c1 = `${valChi-1}${suitChi}`; c2 = `${valChi+1}${suitChi}`;
+                    } else if (vsGameState[actor].closed.includes(`${valChi-2}${suitChi}`) && vsGameState[actor].closed.includes(`${valChi-1}${suitChi}`)) {
+                        c1 = `${valChi-2}${suitChi}`; c2 = `${valChi-1}${suitChi}`;
+                    } else if (vsGameState[actor].closed.includes(`${valChi+1}${suitChi}`) && vsGameState[actor].closed.includes(`${valChi+2}${suitChi}`)) {
+                        c1 = `${valChi+1}${suitChi}`; c2 = `${valChi+2}${suitChi}`;
+                    }
                 }
                 
                 if (c1 && c2) {
