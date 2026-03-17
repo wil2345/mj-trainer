@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.7.0)
+# Taiwan Mahjong Trainer - Project Specification (v1.7.1)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
@@ -185,5 +185,9 @@ Taiwan Mahjong has massive physical constraints (up to 17 tiles in hand, dozens 
 *   **Fixed Overlays vs. Internal Scroll:** Internal scrollbars (`overflow-y-auto` on small divs) provide a poor touch experience. Instead, pin critical interaction areas (like the player's hand and action buttons) to the bottom of the screen (`position: fixed; bottom: 0`) and allow the central content (the rivers) to scroll naturally under them.
 *   **Leverage Tailwind Power:** Use `flex flex-wrap gap-x` instead of strict `grid` layouts for tiles. Tiles need to flow naturally based on the device width. Use `backdrop-blur` for overlays so users can still perceive the table context underneath.
 
-### D. The Golden Rule of Committing
+### D. The Golden Rule of Committing & Bug Fixing
 If you touch `src/js/engine/shanten.js` or `src/js/engine/mcWorker.js`, you **must** run `npm test` before considering the job done. The DP algorithm is heavily memoized; changing a single index can break evaluation trees for 17-tile hands while 14-tile hands appear to work fine. Trust the test suite.
+
+**Whenever you fix a bug**, especially related to AI logic or the mathematical engine, you **MUST write a test case** that reproduces the bug before fixing it. 
+* Add Shanten engine edge cases to `tests/engine.test.js`.
+* Add AI decision-making logic edge cases (e.g., wrong Chi combination chosen, incorrect dead tile tracking) to `tests/aiPolicy.test.js`.

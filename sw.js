@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mj-trainer-cache-v1.7.0';
+const CACHE_NAME = 'mj-trainer-cache-v1.7.1';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -7,6 +7,7 @@ const ASSETS_TO_CACHE = [
     './src/js/constants.js',
     './src/js/engine/shanten.js',
     './src/js/engine/handGenerator.js',
+    './src/js/engine/aiPolicy.js',
     './src/js/components/Tile.js',
     './manifest.json',
     './assets/icons/icon.svg',

@@ -6,6 +6,7 @@ import { renderTile } from './components/Tile.js';
 import { generateTrainingHand, sortHand } from './engine/handGenerator.js';
 import { getDiscardAnalysis, isWinningHand, getChiOptions, getPonOptions, calculateShanten, getKanOptions, getClosedKanOptions } from './engine/shanten.js';
 import { TILE_NAMES, TILE_MAP, createDeck } from './constants.js';
+import { decideAiInterrupt, decideAiTurnAction, decideAiDiscard, calculateRestingStatus } from './engine/aiPolicy.js';
 let currentGameState = {
     mode: null,
     hand: [],
@@ -225,7 +226,7 @@ function initApp() {
             <div class="flex flex-col items-center">
                 <div class="flex items-center gap-2 mb-1">
                     <h2 class="text-2xl font-bold text-gray-800 text-center tracking-tight">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">v1.7.0</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">v1.7.1</span>
                 </div>
                 <p class="text-gray-500 text-xs font-medium">Master your efficiency & intuition</p>
             </div>
@@ -1854,52 +1855,6 @@ let vsGameState = {
 };
 
 /**
- * Calculates the current shanten and acceptance of a resting hand (16 tiles),
- * useful for knowing the state of a hand BEFORE drawing or AFTER a full turn.
- */
-function calculateRestingStatus(actor) {
-    const state = vsGameState[actor];
-    const currentShanten = calculateShanten(state.closed, state.open.length);
-    let currentAcceptance = 0;
-    let currentAcceptedTilesCount = 0;
-
-    const initialCounts = {};
-    state.closed.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
-
-    const deadTiles = [];
-    deadTiles.push(...vsGameState.player.river);
-    deadTiles.push(...vsGameState.ai.river);
-    
-    const extractOpenTiles = (melds, isAiMeld) => {
-        let tiles = [];
-        melds.forEach(meld => {
-            if (Array.isArray(meld)) {
-                tiles.push(...meld);
-            } else if (meld.tiles) {
-                if (isAiMeld || !meld.isClosed || vsGameState.showAiHand || vsGameState.isGameOver) {
-                    tiles.push(...meld.tiles);
-                }
-            }
-        });
-        return tiles;
-    };
-    deadTiles.push(...extractOpenTiles(vsGameState.player.open, false));
-    deadTiles.push(...extractOpenTiles(vsGameState.ai.open, true));
-
-    deadTiles.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
-
-    Object.keys(TILE_NAMES).forEach(t => {
-        if ((initialCounts[t] || 0) >= 4) return;
-        if (calculateShanten([...state.closed, t], state.open.length) < currentShanten) {
-            currentAcceptance += (4 - (initialCounts[t] || 0));
-            currentAcceptedTilesCount += 1;
-        }
-    });
-
-    return { shanten: currentShanten, acceptance: currentAcceptance, acceptedTilesCount: currentAcceptedTilesCount };
-}
-
-/**
  * Displays a temporary action bubble over the AI's avatar.
  */
 function showAiActionBubble(message) {
@@ -2434,8 +2389,15 @@ function vsPlayerDiscard(index) {
 }
 
 function checkAiInterrupt(tile) {
-    // 1. Check AI Ron (Always Ron if possible, regardless of style)
-    if (isWinningHand([...vsGameState.ai.closed, tile], vsGameState.ai.open.length)) {
+    const aiSettings = { difficulty: currentGameState.aiDifficulty, style: currentGameState.aiStyle };
+    const decision = decideAiInterrupt(tile, vsGameState, aiSettings);
+
+    if (!decision) return false;
+
+    // Snapshot AI's resting status before it potentially calls a tile
+    vsGameState.aiLastStatus = calculateRestingStatus(vsGameState.ai.closed, vsGameState.ai.open.length, vsGameState);
+
+    if (decision.action === 'ron') {
         vsGameState.isGameOver = true;
         vsGameState.winner = 'ai';
         vsGameState.ai.closed.push(tile);
@@ -2446,161 +2408,48 @@ function checkAiInterrupt(tile) {
         return true;
     }
 
-    // Snapshot AI's resting status before it potentially calls a tile
-    vsGameState.aiLastStatus = calculateRestingStatus('ai');
-
-    // AI logic for Pon/Chi/Kan
-    // We must evaluate the CURRENT resting hand (e.g. 16 tiles). It is a 3n+1 hand.
-    // We calculate its shanten directly, and find its acceptance by simulating a draw.
-    const currentShanten = calculateShanten(vsGameState.ai.closed, vsGameState.ai.open.length);
-    let currentAcceptance = 0;
-
-    const initialCounts = {};
-    vsGameState.ai.closed.forEach(t => {
-        initialCounts[t] = (initialCounts[t] || 0) + 1;
-    });
-
-    const UNIQUE_TILE_TYPES = Object.keys(TILE_NAMES);
-    UNIQUE_TILE_TYPES.forEach(t => {
-        if ((initialCounts[t] || 0) >= 4) return;
-        const nextHand = [...vsGameState.ai.closed, t];
-        if (calculateShanten(nextHand, vsGameState.ai.open.length) < currentShanten) {
-            currentAcceptance += (4 - (initialCounts[t] || 0));
-        }
-    });
-
-    // Gather all tiles explicitly visible on board (dead tiles)
-    const deadTiles = [];
-    deadTiles.push(...vsGameState.player.river);
-    deadTiles.push(...vsGameState.ai.river);
-    
-    const extractOpenTiles = (openMelds, isAi) => {
-        let tiles = [];
-        openMelds.forEach(meld => {
-            if (Array.isArray(meld)) {
-                tiles.push(...meld);
-            } else if (meld.tiles) {
-                // For Ankan: AI knows its own Ankan, but only counts if game over or showAiHand
-                if (isAi || !meld.isClosed || vsGameState.showAiHand || vsGameState.isGameOver) {
-                    tiles.push(...meld.tiles);
-                }
-            }
-        });
-        return tiles;
-    };
-    
-    deadTiles.push(...extractOpenTiles(vsGameState.player.open, false));
-    deadTiles.push(...extractOpenTiles(vsGameState.ai.open, true));
-
-    // Helper to evaluate if a call is worth it based on style
-    const evaluateCall = (tempHand, nextOpenCount, tilesFromHandUsedForCall) => {
-        const hypotheticalDeadTiles = [...deadTiles, ...tilesFromHandUsedForCall];
-        // Filter out the stolen tile from the hypothetical analysis since it will be forbidden
-        const nextAnalysisRaw = getDiscardAnalysis(tempHand, nextOpenCount, hypotheticalDeadTiles);
-        const nextAnalysis = nextAnalysisRaw.filter(a => a.discard !== tile);
-        
-        if (nextAnalysis.length === 0) return { valid: false };
-        
-        const nextShanten = nextAnalysis[0].shanten;
-        const nextAcceptance = nextAnalysis[0].acceptance;
-
-        // A call MUST either be faster (lower shanten) OR result in more acceptance (better wait)
-        const isImprovement = (nextShanten < currentShanten) || (nextShanten === currentShanten && nextAcceptance > currentAcceptance);
-        
-        if (!isImprovement) return { valid: false };
-
-        if (currentGameState.aiStyle === 'defensive') {
-            // Defensive AI ONLY makes a call if it can discard a 100% safe tile (already in player's river or stolen from player)
-            // It will not make a call if it forces it to discard an unseen/dangerous tile, even if the call lowers Shanten.
-            const playerRiverPlusStolen = [...vsGameState.player.river];
-            vsGameState.ai.open.forEach(m => { if (Array.isArray(m)) playerRiverPlusStolen.push(m[1]); });
-
-            const hasSafeDiscard = nextAnalysis.some(a => 
-                a.shanten === nextShanten && 
-                playerRiverPlusStolen.includes(a.discard)
-            );
-            if (!hasSafeDiscard) return { valid: false };
-        }
-        
-        // Aggressive & Balanced now both take any move that is a strict improvement
-        return { valid: true, shanten: nextShanten, acceptance: nextAcceptance };
-    };
-
-    // 2. Check AI Kan (Open)
-    const kanOption = getKanOptions(vsGameState.ai.closed, tile);
-    if (kanOption) {
-        const tempHand = vsGameState.ai.closed.filter(t => t !== tile);
-        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1, [tile, tile, tile]).valid) {
-            vsGameState.ai.closed = sortHand(tempHand);
-            vsGameState.player.river.pop(); // Remove stolen tile from player's river
-            vsGameState.ai.open.push([tile, tile, tile, tile]);
-            vsGameState.trajectory.push({ actor: 'ai', action: 'kan', tile: tile });
-            vsGameState.latestDiscard = null;
-            vsGameState.currentTurn = 'ai';
-            showAiActionBubble('槓');
-            renderVsArena();
-            setTimeout(() => {
-                vsDrawReplacement('ai');
-            }, currentGameState.aiSpeedMode ? 0 : 1000);
-            return true;
-        }
+    if (decision.action === 'kan') {
+        vsGameState.ai.closed = sortHand(vsGameState.ai.closed.filter(t => t !== tile));
+        vsGameState.player.river.pop(); // Remove stolen tile from player's river
+        vsGameState.ai.open.push([tile, tile, tile, tile]);
+        vsGameState.trajectory.push({ actor: 'ai', action: 'kan', tile: tile });
+        vsGameState.latestDiscard = null;
+        vsGameState.currentTurn = 'ai';
+        showAiActionBubble('槓');
+        renderVsArena();
+        setTimeout(() => {
+            vsDrawReplacement('ai');
+        }, currentGameState.aiSpeedMode ? 0 : 1000);
+        return true;
     }
 
-    // 3. Check AI Pon
-    const ponOption = getPonOptions(vsGameState.ai.closed, tile);
-    if (ponOption) {
-        const tempHand = [...vsGameState.ai.closed];
-        tempHand.splice(tempHand.indexOf(tile), 1);
-        tempHand.splice(tempHand.indexOf(tile), 1);
-        
-        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1, [tile, tile]).valid) {
-            // AI Ponds
-            vsGameState.ai.closed = sortHand(tempHand);
-            vsGameState.player.river.pop(); // Remove stolen tile from player's river
-            vsGameState.ai.open.push([tile, tile, tile]);
-            vsGameState.trajectory.push({ actor: 'ai', action: 'pon', tile: tile });
-            vsGameState.latestDiscard = null; // Clear latest discard since it was stolen
-            vsGameState.currentTurn = 'ai';
-            vsGameState.forbiddenDiscard = tile; // Rule: Cannot discard stolen tile same turn
-            showAiActionBubble('碰');
-            renderVsArena(); // Show the new meld immediately
-            setTimeout(() => {
-                vsAiDiscard();
-            }, currentGameState.aiSpeedMode ? 0 : 1000);
-            return true;
-        }
+    if (decision.action === 'pon') {
+        vsGameState.ai.closed.splice(vsGameState.ai.closed.indexOf(tile), 1);
+        vsGameState.ai.closed.splice(vsGameState.ai.closed.indexOf(tile), 1);
+        vsGameState.ai.closed = sortHand(vsGameState.ai.closed);
+        vsGameState.player.river.pop(); // Remove stolen tile from player's river
+        vsGameState.ai.open.push([tile, tile, tile]);
+        vsGameState.trajectory.push({ actor: 'ai', action: 'pon', tile: tile });
+        vsGameState.latestDiscard = null; // Clear latest discard since it was stolen
+        vsGameState.currentTurn = 'ai';
+        vsGameState.forbiddenDiscard = tile; // Rule: Cannot discard stolen tile same turn
+        showAiActionBubble('碰');
+        renderVsArena(); // Show the new meld immediately
+        setTimeout(() => {
+            vsAiDiscard();
+        }, currentGameState.aiSpeedMode ? 0 : 1000);
+        return true;
     }
 
-    // 4. Check AI Chi (only because it's 1v1 and AI is always next)
-    const chiOptions = getChiOptions(vsGameState.ai.closed, tile);
-    let bestChi = null;
-    let bestChiEval = null;
-
-    for (let opt of chiOptions) {
-        const tempHand = [...vsGameState.ai.closed];
-        tempHand.splice(tempHand.indexOf(opt[0]), 1);
-        tempHand.splice(tempHand.indexOf(opt[1]), 1);
-        
-        const evalResult = evaluateCall(tempHand, vsGameState.ai.open.length + 1, opt);
-        if (evalResult.valid) {
-            if (!bestChiEval || evalResult.shanten < bestChiEval.shanten || (evalResult.shanten === bestChiEval.shanten && evalResult.acceptance > bestChiEval.acceptance)) {
-                bestChi = opt;
-                bestChiEval = evalResult;
-            }
-        }
-    }
-
-    if (bestChi) {
-        const tempHand = [...vsGameState.ai.closed];
-        tempHand.splice(tempHand.indexOf(bestChi[0]), 1);
-        tempHand.splice(tempHand.indexOf(bestChi[1]), 1);
-        
-        // AI Chis
-        vsGameState.ai.closed = sortHand(tempHand);
+    if (decision.action === 'chi') {
+        const opt = decision.opt;
+        vsGameState.ai.closed.splice(vsGameState.ai.closed.indexOf(opt[0]), 1);
+        vsGameState.ai.closed.splice(vsGameState.ai.closed.indexOf(opt[1]), 1);
+        vsGameState.ai.closed = sortHand(vsGameState.ai.closed);
         vsGameState.player.river.pop(); // Remove stolen tile from player's river
         // Display stolen tile in the middle: [opt[0], stolen, opt[1]]
-        vsGameState.ai.open.push([bestChi[0], tile, bestChi[1]]);
-        vsGameState.trajectory.push({ actor: 'ai', action: 'chi', tile: tile, opt: bestChi });
+        vsGameState.ai.open.push([opt[0], tile, opt[1]]);
+        vsGameState.trajectory.push({ actor: 'ai', action: 'chi', tile: tile, opt: opt });
         vsGameState.latestDiscard = null; // Clear latest discard since it was stolen
         vsGameState.currentTurn = 'ai';
         vsGameState.forbiddenDiscard = tile; // Rule: Cannot discard stolen tile same turn
@@ -2645,205 +2494,16 @@ function checkPlayerInterrupt(tile) {
     return false;
 }
 
-/**
- * Internal helper for AI to run a quick MC simulation on a candidate discard.
- * Returns a Promise that resolves to the win rate.
- */
-function runMCEvaluation(hand, discard, runs, maxDraws, includeHonors, deadTiles = []) {
-    return new Promise((resolve) => {
-        const worker = new Worker('./src/js/engine/mcWorker.js', { type: 'module' });
-        worker.onmessage = function(e) {
-            if (e.data.success) {
-                resolve(e.data.stats.winRate);
-                worker.terminate();
-            } else if (e.data.error) {
-                resolve(0); // On error, treat as 0% win rate
-                worker.terminate();
-            }
-        };
-        worker.postMessage({ 
-            hand, 
-            discard, 
-            runs, 
-            maxDraws, 
-            includeHonors,
-            policy: 'greedy',
-            deadTiles
-        });
-    });
-}
-
 async function vsAiDiscard() {
-    // Rule: AI cannot discard the tile it just called (forbiddenDiscard)
-    const allowedClosedHand = vsGameState.ai.closed.filter(t => t !== vsGameState.forbiddenDiscard);
-    
-    // Collect all visible 'dead' tiles for context-aware analysis
-    let deadTiles = [];
-    deadTiles.push(...vsGameState.player.river);
-    deadTiles.push(...vsGameState.ai.river);
-    
-    const extractOpenTiles = (openMelds, isAi) => {
-        let tiles = [];
-        openMelds.forEach(meld => {
-            if (Array.isArray(meld)) {
-                tiles.push(...meld);
-            } else if (meld.tiles) {
-                if (isAi || !meld.isClosed || vsGameState.showAiHand || vsGameState.isGameOver) {
-                    tiles.push(...meld.tiles);
-                }
-            }
-        });
-        return tiles;
-    };
-    deadTiles.push(...extractOpenTiles(vsGameState.player.open, false));
-    deadTiles.push(...extractOpenTiles(vsGameState.ai.open, true));
-
-    const analysis = getDiscardAnalysis(vsGameState.ai.closed, vsGameState.ai.open.length, deadTiles)
-        .filter(a => a.discard !== vsGameState.forbiddenDiscard);
+    const aiSettings = { difficulty: currentGameState.aiDifficulty, style: currentGameState.aiStyle };
+    const { discard: bestMove, analysisPayload } = await decideAiDiscard(vsGameState, aiSettings, vsGameState.forbiddenDiscard);
     
     // reset forbidden discard after it has been used to filter this turn
     vsGameState.forbiddenDiscard = null;
-
-    if (currentGameState.aiStyle === 'defensive') {
-        // Gathering player discards specifically for safety logic
-        const playerRiverPlusStolen = [...vsGameState.player.river];
-        vsGameState.ai.open.forEach(m => { if (Array.isArray(m)) playerRiverPlusStolen.push(m[1]); });
-
-        // Defensive AI prioritizes safe discards within the same Shanten level
-        analysis.sort((a, b) => {
-            if (a.shanten !== b.shanten) return a.shanten - b.shanten;
-            const aSafe = playerRiverPlusStolen.includes(a.discard);
-            const bSafe = playerRiverPlusStolen.includes(b.discard);
-            if (aSafe && !bSafe) return -1;
-            if (!aSafe && bSafe) return 1;
-            return b.acceptance - a.acceptance;
-        });
-    }
-
-    if (analysis.length === 0 && allowedClosedHand.length === 0) {
-        const fallbackMove = vsGameState.ai.closed[0];
-        executeAiDiscard(fallbackMove);
-        return;
-    }
-
-    let bestMove;
-    const handSizeAfterDiscard = vsGameState.ai.closed.length - 1;
-    let analysisPayload = null; // Will hold reasoning for Replay mode
-
-    if (currentGameState.aiDifficulty === 'expert') {
-        const bestPossibleShanten = analysis[0].shanten;
-        const bestAcceptance = analysis[0].acceptance;
-        // Also consider the number of types (款) to ensure it's a true tie in quality
-        const bestTypes = analysis[0].acceptedTiles.length;
-        
-        // Find all candidates tied for the absolute best DP stats
-        let topTierCandidates = analysis.filter(a => 
-            a.shanten === bestPossibleShanten && 
-            a.acceptance === bestAcceptance &&
-            a.acceptedTiles.length === bestTypes
-        );
-
-        if (currentGameState.aiStyle === 'defensive') {
-            const playerRiverPlusStolen = [...vsGameState.player.river];
-            vsGameState.ai.open.forEach(m => { if (Array.isArray(m)) playerRiverPlusStolen.push(m[1]); });
-            
-            const safeCandidates = topTierCandidates.filter(a => playerRiverPlusStolen.includes(a.discard));
-            if (safeCandidates.length > 0) {
-                topTierCandidates = safeCandidates;
-            }
-        }
-
-        // Only run MC if there is a tie to break, we are close to winning (0, 1, or 2 shanten),
-        // and the hand is not completely full (prohibit for 14-17 tiles to save performance).
-        if (topTierCandidates.length > 1 && bestPossibleShanten <= 2 && handSizeAfterDiscard < 14) {
-            // Aggressive scaling for mobile performance
-            let iterations, maxDraws;
-            if (handSizeAfterDiscard > 10) {
-                // Medium hands (11-13 tiles)
-                iterations = 200;
-                maxDraws = 3;
-            } else {
-                // Small hands (<= 10 tiles)
-                iterations = 1000;
-                maxDraws = 5;
-            }
-            
-            // Evaluate each candidate in parallel
-            const evaluations = await Promise.all(topTierCandidates.map(c => 
-                runMCEvaluation(vsGameState.ai.closed, c.discard, iterations, maxDraws, true, deadTiles)
-            ));
-            
-            // Find candidate with highest win rate
-            let maxWinRate = -1;
-            let bestCandidateIdx = 0;
-            evaluations.forEach((rate, idx) => {
-                if (rate > maxWinRate) {
-                    maxWinRate = rate;
-                    bestCandidateIdx = idx;
-                }
-            });
-            bestMove = topTierCandidates[bestCandidateIdx].discard;
-            
-            analysisPayload = {
-                type: 'mc',
-                options: topTierCandidates.map((c, idx) => ({ 
-                    discard: c.discard, 
-                    shanten: c.shanten,
-                    acceptance: c.acceptance,
-                    acceptedTilesCount: c.acceptedTiles.length,
-                    winRate: evaluations[idx] 
-                })).sort((a, b) => b.winRate - a.winRate)
-            };
-        } else {
-            bestMove = topTierCandidates[0].discard;
-            analysisPayload = { 
-                type: currentGameState.aiStyle === 'defensive' ? 'defensive' : 'dp', 
-                options: analysis.slice(0, 3).map(m => ({ 
-                    discard: m.discard, 
-                    shanten: m.shanten, 
-                    acceptance: m.acceptance,
-                    acceptedTilesCount: m.acceptedTiles.length
-                })) 
-            };
-        }
-    } else if (currentGameState.aiDifficulty === 'random') {
-        bestMove = allowedClosedHand[Math.floor(Math.random() * allowedClosedHand.length)];
-        analysisPayload = { type: 'random', options: [] };
-    } else if (currentGameState.aiDifficulty === 'beginner') {
-        const topMoves = analysis.slice(0, Math.min(3, analysis.length));
-        bestMove = topMoves[Math.floor(Math.random() * topMoves.length)].discard;
-        analysisPayload = { 
-            type: 'beginner', 
-            options: topMoves.map(m => ({ 
-                discard: m.discard, 
-                shanten: m.shanten, 
-                acceptance: m.acceptance,
-                acceptedTilesCount: m.acceptedTiles.length 
-            })) 
-        };
-    } else {
-        bestMove = analysis[0].discard;
-        analysisPayload = { 
-            type: currentGameState.aiStyle === 'defensive' ? 'defensive' : 'dp', 
-            options: analysis.slice(0, 3).map(m => ({ 
-                discard: m.discard, 
-                shanten: m.shanten, 
-                acceptance: m.acceptance,
-                acceptedTilesCount: m.acceptedTiles.length
-            })) 
-        };
-    }
     
+    // Inject previousStatus
     if (analysisPayload) {
-        const chosenAnalysis = analysis.find(a => a.discard === bestMove) || analysis[0];
         analysisPayload.previousStatus = vsGameState.aiLastStatus;
-        if (chosenAnalysis) {
-            analysisPayload.chosenStatus = { 
-                shanten: chosenAnalysis.shanten, 
-                acceptance: chosenAnalysis.acceptance,
-                acceptedTilesCount: chosenAnalysis.acceptedTiles.length
-            };
-        }
     }
 
     executeAiDiscard(bestMove, analysisPayload);
@@ -2894,8 +2554,10 @@ function vsAiTurn() {
     vsGameState.ai.closed.push(tile);
     vsGameState.trajectory.push({ actor: 'ai', action: 'draw', tile: tile });
 
-    // 2. Check for AI win (Tsumo)
-    if (isWinningHand(vsGameState.ai.closed, vsGameState.ai.open.length)) {
+    const aiSettings = { difficulty: currentGameState.aiDifficulty, style: currentGameState.aiStyle };
+    const decision = decideAiTurnAction(vsGameState, aiSettings);
+
+    if (decision && decision.action === 'tsumo') {
         vsGameState.isGameOver = true;
         vsGameState.winner = 'ai';
         showAiActionBubble('自摸');
@@ -2906,44 +2568,28 @@ function vsAiTurn() {
     
     renderVsArena(); // Show the drawn tile before a possible pause
 
-    // 3. Check for AI Ankan/Kakan
-    if (currentGameState.aiStyle !== 'defensive') {
-        const kanOpts = getClosedKanOptions(vsGameState.ai.closed, vsGameState.ai.open);
-        if (kanOpts.length > 0) {
-            // Simple heuristic: always Kan if it doesn't increase Shanten
-            const currentShanten = calculateShanten(vsGameState.ai.closed, vsGameState.ai.open.length);
-            for (let opt of kanOpts) {
-                let tempHand;
-                if (opt.type === 'ankan') {
-                    tempHand = vsGameState.ai.closed.filter(t => t !== opt.tile);
-                } else {
-                    tempHand = [...vsGameState.ai.closed];
-                    tempHand.splice(tempHand.indexOf(opt.tile), 1);
-                }
-                
-                if (calculateShanten(tempHand, vsGameState.ai.open.length + 1) <= currentShanten) {
-                    if (opt.type === 'ankan') {
-                        vsGameState.ai.closed = sortHand(tempHand);
-                        vsGameState.ai.open.push({ tiles: [opt.tile, opt.tile, opt.tile, opt.tile], isClosed: true });
-                    } else {
-                        const meldIdx = vsGameState.ai.open.findIndex(m => !Array.isArray(m) ? (m.tiles[0] === opt.tile) : (m[0] === opt.tile && m.length === 3));
-                        if (Array.isArray(vsGameState.ai.open[meldIdx])) {
-                            vsGameState.ai.open[meldIdx].push(opt.tile);
-                        } else {
-                            vsGameState.ai.open[meldIdx].tiles.push(opt.tile);
-                        }
-                        vsGameState.ai.closed = sortHand(tempHand);
-                    }
-                    vsGameState.trajectory.push({ actor: 'ai', action: opt.type, tile: opt.tile });
-                    showAiActionBubble(opt.type === 'ankan' ? '暗槓' : '加槓');
-                    renderVsArena();
-                    setTimeout(() => {
-                        vsDrawReplacement('ai');
-                    }, currentGameState.aiSpeedMode ? 0 : 1000);
-                    return; // Replacement draw logic will handle next steps
-                }
+    if (decision && (decision.action === 'ankan' || decision.action === 'kakan')) {
+        const opt = decision;
+        if (opt.action === 'ankan') {
+            vsGameState.ai.closed = sortHand(vsGameState.ai.closed.filter(t => t !== opt.tile));
+            vsGameState.ai.open.push({ tiles: [opt.tile, opt.tile, opt.tile, opt.tile], isClosed: true });
+        } else {
+            const meldIdx = vsGameState.ai.open.findIndex(m => !Array.isArray(m) ? (m.tiles[0] === opt.tile) : (m[0] === opt.tile && m.length === 3));
+            if (Array.isArray(vsGameState.ai.open[meldIdx])) {
+                vsGameState.ai.open[meldIdx].push(opt.tile);
+            } else {
+                vsGameState.ai.open[meldIdx].tiles.push(opt.tile);
             }
+            vsGameState.ai.closed.splice(vsGameState.ai.closed.indexOf(opt.tile), 1);
+            vsGameState.ai.closed = sortHand(vsGameState.ai.closed);
         }
+        vsGameState.trajectory.push({ actor: 'ai', action: opt.action, tile: opt.tile });
+        showAiActionBubble(opt.action === 'ankan' ? '暗槓' : '加槓');
+        renderVsArena();
+        setTimeout(() => {
+            vsDrawReplacement('ai');
+        }, currentGameState.aiSpeedMode ? 0 : 1000);
+        return;
     }
 
     // 4. AI Discards

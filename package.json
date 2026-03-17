@@ -1,13 +1,13 @@
 {
   "name": "mj-trainer",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "type": "module",
   "main": "sw.js",
   "directories": {
     "test": "tests"
   },
   "scripts": {
-    "test": "node tests/engine.test.js",
+    "test": "node tests/engine.test.js && node tests/aiPolicy.test.js",
     "scrape": "node scripts/scrapeTenhou.js"
   },
   "keywords": [],
