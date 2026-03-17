@@ -13,7 +13,8 @@ import {
 import { decideAiInterrupt, decideAiTurnAction, decideAiDiscard, calculateRestingStatus } from '../engine/aiPolicy.js';
 import { addMatchRecord } from '../storage.js';
 import { renderTile } from '../components/Tile.js';
-import { initApp, showSettingsModal, initReplayMode } from '../app.js';
+import { initApp, showSettingsModal } from '../app.js';
+import { initReplayMode } from './replay.js';
 
 export function showAiActionBubble(message) {
     const container = document.getElementById('vs-notification-container');
