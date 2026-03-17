@@ -402,10 +402,16 @@ export const calculateShanten = (hand, openMeldsCount = 0) => {
 };
 
 /**
+ * Manual cache clearing if needed for memory management
+ */
+export const clearShantenCache = () => {
+    dpMemo.clear();
+};
+
+/**
  * Checks if a fully drawn hand (3n + 2) is a winning hand.
  */
 export const isWinningHand = (hand, openMeldsCount = 0) => {
-    dpMemo.clear();
     return calculateShanten(hand, openMeldsCount) === -1;
 };
 
@@ -416,11 +422,8 @@ export const isWinningHand = (hand, openMeldsCount = 0) => {
  * @param {string[]} deadTiles - Optional: Array of tiles already visible on board (rivers/open melds)
  */
 export const getDiscardAnalysis = (hand, openMeldsCount = 0, deadTiles = []) => {
-    dpMemo.clear(); // Clear cache at the start of a new analysis run to save memory
-    
     const analysis = [];
-    const uniqueTiles = [...new Set(hand)];
-    
+    const uniqueTiles = [...new Set(hand)];    
     // Count occurrences in hand
     const initialCounts = {};
     hand.forEach(tile => {

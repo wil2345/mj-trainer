@@ -225,7 +225,7 @@ function initApp() {
             <div class="flex flex-col items-center">
                 <div class="flex items-center gap-2 mb-1">
                     <h2 class="text-2xl font-bold text-gray-800 text-center tracking-tight">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">v1.6.0</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">v1.7.0</span>
                 </div>
                 <p class="text-gray-500 text-xs font-medium">Master your efficiency & intuition</p>
             </div>
@@ -289,6 +289,18 @@ function initApp() {
             <div class="flex flex-col gap-3 mt-2">
                 <h3 class="text-sm font-bold text-gray-400 px-1 uppercase tracking-widest">Select Mode</h3>
                 
+                <div id="btn-vs" class="bg-white p-5 rounded-xl shadow-md border border-gray-200 flex items-center justify-between cursor-pointer hover:border-orange-500 hover:shadow-lg transition group">
+                    <div class="text-left">
+                        <p class="font-bold text-gray-800 text-lg">AI對戰練習</p>
+                        <p class="text-xs text-gray-500 mt-1">Full match against the AI.</p>
+                    </div>
+                    <div class="bg-orange-50 group-hover:bg-orange-500 p-3 rounded-xl transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-orange-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h.01M15 9h.01M8 13h8" />
+                        </svg>
+                    </div>
+                </div>
+
                 <div id="btn-trainer" class="bg-white p-5 rounded-xl shadow-md border border-gray-200 flex items-center justify-between cursor-pointer hover:border-mj-green hover:shadow-lg transition group">
                     <div class="text-left">
                         <p class="font-bold text-gray-800 text-lg">最大機率打法練習</p>
@@ -309,18 +321,6 @@ function initApp() {
                     <div class="bg-blue-50 group-hover:bg-blue-500 p-3 rounded-xl transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                    </div>
-                </div>
-
-                <div id="btn-vs" class="bg-white p-5 rounded-xl shadow-md border border-gray-200 flex items-center justify-between cursor-pointer hover:border-orange-500 hover:shadow-lg transition group">
-                    <div class="text-left">
-                        <p class="font-bold text-gray-800 text-lg">AI對戰練習</p>
-                        <p class="text-xs text-gray-500 mt-1">Full match against the AI.</p>
-                    </div>
-                    <div class="bg-orange-50 group-hover:bg-orange-500 p-3 rounded-xl transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-orange-500 group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h.01M15 9h.01M8 13h8" />
                         </svg>
                     </div>
                 </div>
@@ -1142,7 +1142,7 @@ function handleDiscard(tile, index) {
     renderFeedbackState(userMove, allOptimalMoves, isCorrect, isCalculator, tile, index);
 }
 
-function renderHistoryScene(activeTab = 'training') {
+function renderHistoryScene(activeTab = 'arena') {
     currentGameState.mode = 'History';
     const appContainer = document.getElementById('app');
     const stats = loadStats();
@@ -2292,6 +2292,7 @@ function handleVsAction(type) {
     } else if (type === 'ron') {
         vsGameState.isGameOver = true;
         vsGameState.winner = 'player';
+        vsGameState.ai.river.pop(); // Remove stolen tile from AI's river
         vsGameState.player.closed.push(tile);
         vsGameState.trajectory.push({ actor: 'player', action: 'ron', tile });
         vsGameState.pendingAction = null;
@@ -2299,6 +2300,7 @@ function handleVsAction(type) {
         renderVsArena();
     } else if (type === 'pon') {
         // Remove 2 tiles from hand
+        vsGameState.ai.river.pop(); // Remove stolen tile from AI's river
         vsGameState.player.closed.splice(vsGameState.player.closed.indexOf(tile), 1);
         vsGameState.player.closed.splice(vsGameState.player.closed.indexOf(tile), 1);
         vsGameState.player.open.push([tile, tile, tile]);
@@ -2317,6 +2319,7 @@ function handleVsAction(type) {
         }
     } else if (type === 'kan') {
         // --- ADDED: Open Kan (Daiminkan) ---
+        vsGameState.ai.river.pop(); // Remove stolen tile from AI's river
         vsGameState.player.closed = vsGameState.player.closed.filter(t => t !== tile);
         vsGameState.player.open.push([tile, tile, tile, tile]);
         vsGameState.trajectory.push({ actor: 'player', action: 'kan', tile });
@@ -2366,6 +2369,7 @@ function showChiModal(options, tile) {
 }
 
 function executeChi(opt, tile) {
+    vsGameState.ai.river.pop(); // Remove stolen tile from AI's river
     vsGameState.player.closed.splice(vsGameState.player.closed.indexOf(opt[0]), 1);
     vsGameState.player.closed.splice(vsGameState.player.closed.indexOf(opt[1]), 1);
     // Display stolen tile in the middle: [opt[0], stolen, opt[1]]
@@ -2489,9 +2493,10 @@ function checkAiInterrupt(tile) {
     deadTiles.push(...extractOpenTiles(vsGameState.ai.open, true));
 
     // Helper to evaluate if a call is worth it based on style
-    const evaluateCall = (tempHand, nextOpenCount) => {
+    const evaluateCall = (tempHand, nextOpenCount, tilesFromHandUsedForCall) => {
+        const hypotheticalDeadTiles = [...deadTiles, ...tilesFromHandUsedForCall];
         // Filter out the stolen tile from the hypothetical analysis since it will be forbidden
-        const nextAnalysisRaw = getDiscardAnalysis(tempHand, nextOpenCount, deadTiles);
+        const nextAnalysisRaw = getDiscardAnalysis(tempHand, nextOpenCount, hypotheticalDeadTiles);
         const nextAnalysis = nextAnalysisRaw.filter(a => a.discard !== tile);
         
         if (nextAnalysis.length === 0) return { valid: false };
@@ -2525,8 +2530,9 @@ function checkAiInterrupt(tile) {
     const kanOption = getKanOptions(vsGameState.ai.closed, tile);
     if (kanOption) {
         const tempHand = vsGameState.ai.closed.filter(t => t !== tile);
-        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1).valid) {
+        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1, [tile, tile, tile]).valid) {
             vsGameState.ai.closed = sortHand(tempHand);
+            vsGameState.player.river.pop(); // Remove stolen tile from player's river
             vsGameState.ai.open.push([tile, tile, tile, tile]);
             vsGameState.trajectory.push({ actor: 'ai', action: 'kan', tile: tile });
             vsGameState.latestDiscard = null;
@@ -2547,9 +2553,10 @@ function checkAiInterrupt(tile) {
         tempHand.splice(tempHand.indexOf(tile), 1);
         tempHand.splice(tempHand.indexOf(tile), 1);
         
-        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1).valid) {
+        if (evaluateCall(tempHand, vsGameState.ai.open.length + 1, [tile, tile]).valid) {
             // AI Ponds
             vsGameState.ai.closed = sortHand(tempHand);
+            vsGameState.player.river.pop(); // Remove stolen tile from player's river
             vsGameState.ai.open.push([tile, tile, tile]);
             vsGameState.trajectory.push({ actor: 'ai', action: 'pon', tile: tile });
             vsGameState.latestDiscard = null; // Clear latest discard since it was stolen
@@ -2574,7 +2581,7 @@ function checkAiInterrupt(tile) {
         tempHand.splice(tempHand.indexOf(opt[0]), 1);
         tempHand.splice(tempHand.indexOf(opt[1]), 1);
         
-        const evalResult = evaluateCall(tempHand, vsGameState.ai.open.length + 1);
+        const evalResult = evaluateCall(tempHand, vsGameState.ai.open.length + 1, opt);
         if (evalResult.valid) {
             if (!bestChiEval || evalResult.shanten < bestChiEval.shanten || (evalResult.shanten === bestChiEval.shanten && evalResult.acceptance > bestChiEval.acceptance)) {
                 bestChi = opt;
@@ -2590,6 +2597,7 @@ function checkAiInterrupt(tile) {
         
         // AI Chis
         vsGameState.ai.closed = sortHand(tempHand);
+        vsGameState.player.river.pop(); // Remove stolen tile from player's river
         // Display stolen tile in the middle: [opt[0], stolen, opt[1]]
         vsGameState.ai.open.push([bestChi[0], tile, bestChi[1]]);
         vsGameState.trajectory.push({ actor: 'ai', action: 'chi', tile: tile, opt: bestChi });
@@ -2722,14 +2730,18 @@ async function vsAiDiscard() {
     const handSizeAfterDiscard = vsGameState.ai.closed.length - 1;
     let analysisPayload = null; // Will hold reasoning for Replay mode
 
-    if (currentGameState.aiDifficulty === 'expert' && handSizeAfterDiscard <= 8) {
-        // --- Expert internal Monte Carlo logic ---
-        const iterations = handSizeAfterDiscard >= 7 ? 100 : 1000;
-        const maxDraws = 5;
-        
-        // Filter candidates: ONLY evaluate moves that maintain the absolute best possible Shanten for this hand state.
+    if (currentGameState.aiDifficulty === 'expert') {
         const bestPossibleShanten = analysis[0].shanten;
-        let topTierCandidates = analysis.filter(a => a.shanten === bestPossibleShanten);
+        const bestAcceptance = analysis[0].acceptance;
+        // Also consider the number of types (款) to ensure it's a true tie in quality
+        const bestTypes = analysis[0].acceptedTiles.length;
+        
+        // Find all candidates tied for the absolute best DP stats
+        let topTierCandidates = analysis.filter(a => 
+            a.shanten === bestPossibleShanten && 
+            a.acceptance === bestAcceptance &&
+            a.acceptedTiles.length === bestTypes
+        );
 
         if (currentGameState.aiStyle === 'defensive') {
             const playerRiverPlusStolen = [...vsGameState.player.river];
@@ -2741,12 +2753,23 @@ async function vsAiDiscard() {
             }
         }
 
-        // Consider only top 3 candidates from this top tier
-        const candidates = topTierCandidates.slice(0, Math.min(3, topTierCandidates.length));
-        
-        if (candidates.length > 1) {
+        // Only run MC if there is a tie to break, we are close to winning (0, 1, or 2 shanten),
+        // and the hand is not completely full (prohibit for 14-17 tiles to save performance).
+        if (topTierCandidates.length > 1 && bestPossibleShanten <= 2 && handSizeAfterDiscard < 14) {
+            // Aggressive scaling for mobile performance
+            let iterations, maxDraws;
+            if (handSizeAfterDiscard > 10) {
+                // Medium hands (11-13 tiles)
+                iterations = 200;
+                maxDraws = 3;
+            } else {
+                // Small hands (<= 10 tiles)
+                iterations = 1000;
+                maxDraws = 5;
+            }
+            
             // Evaluate each candidate in parallel
-            const evaluations = await Promise.all(candidates.map(c => 
+            const evaluations = await Promise.all(topTierCandidates.map(c => 
                 runMCEvaluation(vsGameState.ai.closed, c.discard, iterations, maxDraws, true, deadTiles)
             ));
             
@@ -2759,15 +2782,29 @@ async function vsAiDiscard() {
                     bestCandidateIdx = idx;
                 }
             });
-            bestMove = candidates[bestCandidateIdx].discard;
+            bestMove = topTierCandidates[bestCandidateIdx].discard;
             
             analysisPayload = {
                 type: 'mc',
-                options: candidates.map((c, idx) => ({ discard: c.discard, winRate: evaluations[idx] })).sort((a, b) => b.winRate - a.winRate)
+                options: topTierCandidates.map((c, idx) => ({ 
+                    discard: c.discard, 
+                    shanten: c.shanten,
+                    acceptance: c.acceptance,
+                    acceptedTilesCount: c.acceptedTiles.length,
+                    winRate: evaluations[idx] 
+                })).sort((a, b) => b.winRate - a.winRate)
             };
         } else {
-            bestMove = candidates[0].discard;
-            analysisPayload = { type: 'mc', options: [{ discard: bestMove, winRate: 100 }] };
+            bestMove = topTierCandidates[0].discard;
+            analysisPayload = { 
+                type: currentGameState.aiStyle === 'defensive' ? 'defensive' : 'dp', 
+                options: analysis.slice(0, 3).map(m => ({ 
+                    discard: m.discard, 
+                    shanten: m.shanten, 
+                    acceptance: m.acceptance,
+                    acceptedTilesCount: m.acceptedTiles.length
+                })) 
+            };
         }
     } else if (currentGameState.aiDifficulty === 'random') {
         bestMove = allowedClosedHand[Math.floor(Math.random() * allowedClosedHand.length)];
@@ -2862,6 +2899,7 @@ function vsAiTurn() {
         vsGameState.isGameOver = true;
         vsGameState.winner = 'ai';
         showAiActionBubble('自摸');
+        saveMatchIfOver();
         renderVsArena();
         return;
     }
@@ -3014,6 +3052,7 @@ function vsDrawReplacement(actor) {
             vsGameState.isGameOver = true;
             vsGameState.winner = 'ai';
             showAiActionBubble('自摸');
+            saveMatchIfOver();
         }
     }
     
@@ -3038,7 +3077,7 @@ function initReplayMode() {
     renderReplayStep(vsGameState.replayStep);
 }
 
-function renderReplayStep(stepIndex) {
+function renderReplayStep(stepIndex, renderUI = true) {
     // 1. Deterministic Board Reconstruction
     // To go to a specific step, we must restart from the initial seed and replay actions
     const seed = vsGameState.currentSeed;
@@ -3160,7 +3199,9 @@ function renderReplayStep(stepIndex) {
     }
 
     // 3. Render Custom Replay UI
-    renderReplayUI(stepIndex, currentTrajectoryItem);
+    if (renderUI) {
+        renderReplayUI(stepIndex, currentTrajectoryItem);
+    }
 }
 
 function renderReplayUI(stepIndex, currentTrajectoryItem) {
@@ -3455,6 +3496,9 @@ function renderReplayUI(stepIndex, currentTrajectoryItem) {
     // Event Listeners
     document.getElementById('exit-replay-btn').addEventListener('click', () => {
         vsGameState.isReplaying = false;
+        // Fast-forward state to the end before switching back to Arena UI
+        vsGameState.replayStep = fullTrajectory.length;
+        renderReplayStep(vsGameState.replayStep, false); 
         renderVsArena(); // Go back to game over screen
     });
 
