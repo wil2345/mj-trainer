@@ -653,6 +653,7 @@ export function vsPlayerDraw() {
     if (vsGameState.wall.length === 0) {
         vsGameState.isGameOver = true;
         vsGameState.winner = 'draw';
+        saveMatchIfOver();
         renderVsArena();
         return;
     }
@@ -797,6 +798,7 @@ export function vsDrawReplacement(actor) {
     if (vsGameState.wall.length === 0) {
         vsGameState.isGameOver = true;
         vsGameState.winner = 'draw';
+        saveMatchIfOver();
         renderVsArena();
         return;
     }
