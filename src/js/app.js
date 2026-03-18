@@ -187,7 +187,7 @@ export function initApp() {
             <div class="flex flex-col items-center">
                 <div class="flex items-center gap-2 mb-1">
                     <h2 class="text-2xl font-bold text-gray-800 text-center tracking-tight">Taiwan Mahjong Trainer</h2>
-                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">v1.8.0</span>
+                    <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">v1.8.1</span>
                 </div>
                 <p class="text-gray-500 text-xs font-medium">Master your efficiency & intuition</p>
             </div>

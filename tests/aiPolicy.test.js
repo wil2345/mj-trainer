@@ -1,5 +1,23 @@
 import { decideAiInterrupt, decideAiDiscard } from '../src/js/engine/aiPolicy.js';
 
+// Mock Worker for Node.js environment
+if (typeof global.Worker === 'undefined') {
+    global.Worker = class {
+        constructor() {
+            this.onmessage = null;
+        }
+        postMessage(data) {
+            // Simulate a successful MC result
+            setTimeout(() => {
+                if (this.onmessage) {
+                    this.onmessage({ data: { success: true, stats: { winRate: 0.5 } } });
+                }
+            }, 0);
+        }
+        terminate() {}
+    };
+}
+
 async function runTests() {
     console.log("=========================================");
     console.log("  AI Policy Engine Test Suite");
@@ -81,6 +99,47 @@ async function runTests() {
 
     } catch (e) {
         console.error(`❌ [Fail] Test 2 threw an error:`, e);
+        failed++;
+    }
+
+    // --- TEST 3: Defensive Discard Logic (Character System) ---
+    // AI has a good hand (1向聽) but one of its tiles is very dangerous (Genbutsu exists).
+    // Player has 3 open melds (high danger multiplier).
+    // AI should discard the safe tile even if it breaks its hand.
+    try {
+        const boardState = {
+            player: { 
+                closed: [], 
+                open: [['1m', '2m', '3m'], ['4p', '5p', '6p'], ['7s', '8s', '9s']], // 3 melds!
+                river: ['1z'] // 1z is Genbutsu (100% safe)
+            },
+            ai: { 
+                closed: ['1z', '2p', '3p', '5s', '6s', '1s', '1s'], // 1z is safe, 1s/5s/6s are dangerous
+                open: [], 
+                river: [] 
+            }
+        };
+        
+        // Test Cowardly AI
+        const aiSettings = { difficulty: 'expert', style: 'cowardly' };
+        const { discard } = await decideAiDiscard(boardState, aiSettings, null);
+
+        assert(discard === '1z', `Test 3: Cowardly AI should discard safe 1z. Actual: ${discard}`);
+
+        // Test Aggressive AI (should prioritize efficiency)
+        const aggressiveSettings = { difficulty: 'expert', style: 'aggressive' };
+        const { discard: aggressiveDiscard } = await decideAiDiscard(boardState, aggressiveSettings, null);
+        
+        // Discarding 1z is worst for shanten (it's a pair/potential meld component in some systems, 
+        // though here it's just a lone honor). Actually 1z is a lone honor. 
+        // Let's make 1z a part of a sequence to be sure.
+        
+        boardState.ai.closed = ['1z', '4z', '5z', '1s', '2s', '8p', '9p']; // 1z is Genbutsu
+        const { discard: finalDiscard } = await decideAiDiscard(boardState, aiSettings, null);
+        assert(finalDiscard === '1z', `Test 3 (Revised): Cowardly AI should discard safe 1z over dangerous number tiles. Actual: ${finalDiscard}`);
+
+    } catch (e) {
+        console.error(`❌ [Fail] Test 3 threw an error:`, e);
         failed++;
     }
 

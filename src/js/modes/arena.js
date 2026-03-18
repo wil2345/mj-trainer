@@ -621,14 +621,10 @@ export function checkPlayerInterrupt(tile) {
 
 export async function vsAiDiscard() {
     const aiSettings = { difficulty: currentGameState.aiDifficulty, style: currentGameState.aiStyle };
-    const { discard: bestMove, analysisPayload } = await decideAiDiscard(vsGameState, aiSettings, vsGameState.forbiddenDiscard);
+    const { discard: bestMove, analysisPayload } = await decideAiDiscard(vsGameState, aiSettings, vsGameState.forbiddenDiscard, vsGameState.aiLastStatus);
     
     vsGameState.forbiddenDiscard = null;
     
-    if (analysisPayload) {
-        analysisPayload.previousStatus = vsGameState.aiLastStatus;
-    }
-
     executeAiDiscard(bestMove, analysisPayload);
 }
 
@@ -669,6 +665,9 @@ export function vsPlayerDraw() {
 
 export function vsAiTurn() {
     if (vsGameState.isGameOver) return;
+
+    // Capture status BEFORE draw to show improvement in Replay Mode
+    vsGameState.aiLastStatus = calculateRestingStatus(vsGameState.ai.closed, vsGameState.ai.open.length, vsGameState);
 
     const tile = vsGameState.wall.shift();
     vsGameState.ai.closed.push(tile);
@@ -713,7 +712,6 @@ export function vsAiTurn() {
     }
 
     setTimeout(() => {
-        vsGameState.aiLastStatus = calculateRestingStatus(vsGameState.ai.closed, vsGameState.ai.open.length, vsGameState);
         vsAiDiscard();
     }, currentGameState.aiSpeedMode ? 0 : 1000);
 }

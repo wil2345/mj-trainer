@@ -93,6 +93,7 @@ export function showSettingsModal(modeName, isCalculator, isUpdate, isMCMode = f
                                     <option value="aggressive" ${tempAiStyle === 'aggressive' ? 'selected' : ''}>積極 (Aggressive)</option>
                                     <option value="balanced" ${tempAiStyle === 'balanced' ? 'selected' : ''}>平衡 (Balanced)</option>
                                     <option value="defensive" ${tempAiStyle === 'defensive' ? 'selected' : ''}>保守 (Defensive)</option>
+                                    <option value="cowardly" ${tempAiStyle === 'cowardly' ? 'selected' : ''}>膽小 (Cowardly)</option>
                                 </select>
                             </div>
                             <div id="modal-ai-tenpai-toggle-wrapper" class="flex items-center justify-between p-3 border border-gray-100 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer select-none mt-1">

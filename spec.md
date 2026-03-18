@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.8.0)
+# Taiwan Mahjong Trainer - Project Specification (v1.8.1)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
@@ -52,15 +52,17 @@ Beyond isolated efficiency training, the app features a full 1-on-1 AI Arena to 
     *   **糊 (Ron) / 自摸 (Tsumo)**: Winning mechanics with full Shanten validation.
 *   **AI Settings:**
     *   **Difficulty (難度):** Expert (Perfect efficiency), Beginner (Suboptimal moves), Random (Random discards).
-    *   **Play Style (打法風格):** Aggressive (Calls to improve hand), Balanced (Calls to improve hand), Defensive (Calls only if discard is 100% safe).
+    *   **Play Style (打法風格):** Aggressive (High efficiency, ignores danger), Balanced (Default), Defensive (Prioritizes safe discards), Cowardly (Extremely defensive, refuses to open hand if opponent looks dangerous).
     *   **Show AI State (顯示AI叫糊狀態):** Toggles dynamic badges showing the AI's exact state (-1=胡牌, 0=叫糊, >0=X向聽).
     *   **AI Speed Mode (極速AI模式):** Toggles between a 1-second "human-like" delay for AI actions or instant execution (0ms).
     *   **Match Seed:** Configurable numeric seed to guarantee deterministic draws.
 *   **Advanced Features:**
     *   **Strict Improvement Rule:** The AI will never make a "sideways" call (like kuikae) that locks its hand without mathematical benefit. A call MUST lower Shanten OR increase total tile acceptance.
     *   **Kuikae (Forbidden Discard):** Both the player and AI are physically prevented from immediately discarding a tile they just claimed via a Chi or Pon.
-    *   **Defensive Safety Logic:** When set to Defensive, the AI will prioritize discarding tiles that exist in the player's river or have been explicitly stolen from the player, ensuring it does not deal into a Ron.
-    *   **Expert MC Logic:** The Expert AI uses internal Monte Carlo simulations for endgame hands (8 or fewer tiles) to evaluate the highest win-rate discard.
+    *   **Character Scoring Logic:** AI discards are determined by a weighted score: `(Efficiency * Weight) - (Danger * Weight * OpponentMultiplier)`. 
+        *   **Danger Calculation:** Detects Genbutsu (現物), Suji (筋), and Kabe (壁) relative to the player's river and open melds.
+        *   **Opponent Multiplier:** AI becomes significantly more defensive as the player opens more melds (up to 5x multiplier at 4 melds).
+    *   **Expert MC Logic:** The Expert AI uses internal Monte Carlo simulations for endgame hands (8 or fewer tiles) to break ties between tiles with similar heuristic scores.
     *   **Undo (悔棋):** Step back up to 50 previous moves to correct mistakes or test different strategies.
 
 ### E. 覆盤 (Match Replay & Analysis Mode)

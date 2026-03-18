@@ -13,6 +13,70 @@ import {
 } from './shanten.js';
 import { TILE_NAMES } from '../constants.js';
 
+const CHARACTER_PROFILES = {
+    'aggressive': { efficiencyWeight: 1.0, dangerWeight: 0.1 },
+    'balanced': { efficiencyWeight: 0.8, dangerWeight: 0.5 },
+    'defensive': { efficiencyWeight: 0.4, dangerWeight: 1.5 },
+    'cowardly': { efficiencyWeight: 0.1, dangerWeight: 5.0 }
+};
+
+/**
+ * Calculates a danger score (0-100) for a tile from the AI's perspective
+ * relative to the player's potential hand.
+ */
+function calculateTileDanger(tile, boardState) {
+    const playerRiver = boardState.player.river;
+    const playerOpen = boardState.player.open;
+    const deadTiles = getDeadTiles(boardState);
+
+    // 1. Genbutsu (現物) - 100% safe
+    // Also include tiles the player has "stolen" via Chi/Pon as safe
+    const playerRiverPlusStolen = [...playerRiver];
+    playerOpen.forEach(m => { 
+        if (Array.isArray(m)) playerRiverPlusStolen.push(m[1]); 
+        else if (m.tiles) playerRiverPlusStolen.push(m.tiles[0]);
+    });
+    
+    if (playerRiverPlusStolen.includes(tile)) return 0;
+
+    const val = parseInt(tile[0]);
+    const suit = tile[1];
+
+    // 2. Honors (Jihai)
+    if (suit === 'z') {
+        const visibleCount = deadTiles.filter(t => t === tile).length;
+        if (visibleCount === 4) return 0;
+        if (visibleCount === 3) return 5;
+        if (visibleCount === 2) return 15;
+        return 50;
+    }
+
+    // 3. Suji (筋)
+    let isSuji = false;
+    if (val === 1) isSuji = playerRiverPlusStolen.includes(`4${suit}`);
+    else if (val === 2) isSuji = playerRiverPlusStolen.includes(`5${suit}`);
+    else if (val === 3) isSuji = playerRiverPlusStolen.includes(`6${suit}`);
+    else if (val === 4) isSuji = playerRiverPlusStolen.includes(`1${suit}`) && playerRiverPlusStolen.includes(`7${suit}`);
+    else if (val === 5) isSuji = playerRiverPlusStolen.includes(`2${suit}`) && playerRiverPlusStolen.includes(`8${suit}`);
+    else if (val === 6) isSuji = playerRiverPlusStolen.includes(`3${suit}`) && playerRiverPlusStolen.includes(`9${suit}`);
+    else if (val === 7) isSuji = playerRiverPlusStolen.includes(`4${suit}`);
+    else if (val === 8) isSuji = playerRiverPlusStolen.includes(`5${suit}`);
+    else if (val === 9) isSuji = playerRiverPlusStolen.includes(`6${suit}`);
+
+    if (isSuji) return 15;
+
+    // 4. Kabe (壁)
+    const counts = {};
+    deadTiles.forEach(t => counts[t] = (counts[t] || 0) + 1);
+    
+    // If all 4 copies of an adjacent tile are visible, it's safer
+    const checkKabe = (v) => v >= 1 && v <= 9 && counts[`${v}${suit}`] === 4;
+    if (checkKabe(val - 1) || checkKabe(val + 1)) return 10;
+
+    // 5. Default
+    return 100;
+}
+
 /**
  * Extracts all visibly dead tiles from the board state from the AI's perspective.
  */
@@ -102,16 +166,24 @@ export function decideAiInterrupt(tile, boardState, aiSettings) {
         
         if (!isImprovement) return { valid: false };
 
-        if (aiSettings.style === 'defensive') {
-            // Defensive AI ONLY makes a call if it can discard a 100% safe tile 
+        if (aiSettings.style === 'defensive' || aiSettings.style === 'cowardly') {
+            // Defensive/Cowardly AI ONLY makes a call if it can discard a 100% safe tile 
             // (already in player's river or stolen from player)
             const playerRiverPlusStolen = [...boardState.player.river];
-            ai.open.forEach(m => { if (Array.isArray(m)) playerRiverPlusStolen.push(m[1]); });
+            boardState.player.open.forEach(m => { 
+                if (Array.isArray(m)) playerRiverPlusStolen.push(m[1]); 
+                else if (m.tiles) playerRiverPlusStolen.push(m.tiles[0]);
+            });
 
             const hasSafeDiscard = nextAnalysis.some(a => 
                 a.shanten === nextShanten && playerRiverPlusStolen.includes(a.discard)
             );
             if (!hasSafeDiscard) return { valid: false };
+
+            // Cowardly AI refuses to open its hand if the opponent is very dangerous (3+ melds)
+            if (aiSettings.style === 'cowardly' && boardState.player.open.length >= 3) {
+                return { valid: false };
+            }
         }
         
         // Aggressive & Balanced take any move that is a strict improvement
@@ -230,61 +302,63 @@ function runMCEvaluation(hand, discard, runs, maxDraws, includeHonors, deadTiles
  * Determines the best tile for the AI to discard.
  * Returns a Promise that resolves to: { discard: string, analysisPayload: object }
  */
-export async function decideAiDiscard(boardState, aiSettings, forbiddenDiscard) {
+export async function decideAiDiscard(boardState, aiSettings, forbiddenDiscard, previousStatus = null) {
     const ai = boardState.ai;
-    const allowedClosedHand = ai.closed.filter(t => t !== forbiddenDiscard);
     const deadTiles = getDeadTiles(boardState);
-    
     const analysis = getDiscardAnalysis(ai.closed, ai.open.length, deadTiles)
         .filter(a => a.discard !== forbiddenDiscard);
 
-    if (aiSettings.style === 'defensive') {
-        // Gathering player discards specifically for safety logic
-        const playerRiverPlusStolen = [...boardState.player.river];
-        ai.open.forEach(m => { if (Array.isArray(m)) playerRiverPlusStolen.push(m[1]); });
-
-        // Defensive AI prioritizes safe discards within the same Shanten level
-        analysis.sort((a, b) => {
-            if (a.shanten !== b.shanten) return a.shanten - b.shanten;
-            const aSafe = playerRiverPlusStolen.includes(a.discard);
-            const bSafe = playerRiverPlusStolen.includes(b.discard);
-            if (aSafe && !bSafe) return -1;
-            if (!aSafe && bSafe) return 1;
-            return b.acceptance - a.acceptance;
-        });
+    if (analysis.length === 0) {
+        const allowed = ai.closed.filter(t => t !== forbiddenDiscard);
+        return { discard: allowed.length > 0 ? allowed[0] : ai.closed[0], analysisPayload: null };
     }
 
-    if (analysis.length === 0 && allowedClosedHand.length === 0) {
-        return { discard: ai.closed[0], analysisPayload: null };
-    }
+    // 1. Get Character Profile (Attack/Defend Weights)
+    const profile = CHARACTER_PROFILES[aiSettings.style] || CHARACTER_PROFILES['balanced'];
+    
+    // 2. Calculate Opponent Danger Multiplier
+    // The multiplier increases based on how close the player looks to winning.
+    let opponentDangerMultiplier = 1.0;
+    const playerOpenCount = boardState.player.open.length;
+    if (playerOpenCount === 1) opponentDangerMultiplier = 1.2;
+    else if (playerOpenCount === 2) opponentDangerMultiplier = 1.5;
+    else if (playerOpenCount === 3) opponentDangerMultiplier = 2.5;
+    else if (playerOpenCount === 4) opponentDangerMultiplier = 5.0;
+
+    // 3. Score each potential move
+    const scoredMoves = analysis.map(m => {
+        // Efficiency Score: Higher is better. 
+        // Shanten is dominant (100 pts per level), Acceptance is a tie-breaker.
+        const efficiencyScore = (10 - m.shanten) * 100 + (m.acceptance / 4);
+        
+        // Danger Score: 0 to 100. Higher is more dangerous.
+        const dangerScore = calculateTileDanger(m.discard, boardState);
+        
+        // Final Weighted Score
+        const finalScore = (profile.efficiencyWeight * efficiencyScore) - 
+                           (profile.dangerWeight * dangerScore * opponentDangerMultiplier);
+        
+        return { 
+            ...m, 
+            efficiencyScore, 
+            dangerScore, 
+            finalScore 
+        };
+    });
+
+    // Sort by Final Score (Descending)
+    scoredMoves.sort((a, b) => b.finalScore - a.finalScore);
 
     let bestMove;
     const handSizeAfterDiscard = ai.closed.length - 1;
     let analysisPayload = null;
 
     if (aiSettings.difficulty === 'expert') {
-        const bestPossibleShanten = analysis[0].shanten;
-        const bestAcceptance = analysis[0].acceptance;
-        const bestTypes = analysis[0].acceptedTiles.length;
-        
-        let topTierCandidates = analysis.filter(a => 
-            a.shanten === bestPossibleShanten && 
-            a.acceptance === bestAcceptance &&
-            a.acceptedTiles.length === bestTypes
-        );
+        // Find candidates that are very close in score to the top choice
+        const topTierCandidates = scoredMoves.filter(m => m.finalScore >= (scoredMoves[0].finalScore * 0.98));
 
-        if (aiSettings.style === 'defensive') {
-            const playerRiverPlusStolen = [...boardState.player.river];
-            ai.open.forEach(m => { if (Array.isArray(m)) playerRiverPlusStolen.push(m[1]); });
-            
-            const safeCandidates = topTierCandidates.filter(a => playerRiverPlusStolen.includes(a.discard));
-            if (safeCandidates.length > 0) {
-                topTierCandidates = safeCandidates;
-            }
-        }
-
-        // Only run MC if there is a tie to break, close to winning (<= 2 shanten), and hand size is < 14
-        if (topTierCandidates.length > 1 && bestPossibleShanten <= 2 && handSizeAfterDiscard < 14) {
+        // Use Monte Carlo if there's a tie to break and we're close to winning
+        if (topTierCandidates.length > 1 && scoredMoves[0].shanten <= 2 && handSizeAfterDiscard < 14) {
             let iterations, maxDraws;
             if (handSizeAfterDiscard > 10) {
                 iterations = 200;
@@ -315,26 +389,32 @@ export async function decideAiDiscard(boardState, aiSettings, forbiddenDiscard) 
                     shanten: c.shanten,
                     acceptance: c.acceptance,
                     acceptedTilesCount: c.acceptedTiles.length,
+                    danger: c.dangerScore,
                     winRate: evaluations[idx] 
                 })).sort((a, b) => b.winRate - a.winRate)
             };
         } else {
-            bestMove = topTierCandidates[0].discard;
+            bestMove = scoredMoves[0].discard;
             analysisPayload = { 
-                type: aiSettings.style === 'defensive' ? 'defensive' : 'dp', 
-                options: analysis.slice(0, 3).map(m => ({ 
+                type: 'scoring', 
+                style: aiSettings.style,
+                options: scoredMoves.slice(0, 3).map(m => ({ 
                     discard: m.discard, 
                     shanten: m.shanten, 
                     acceptance: m.acceptance,
-                    acceptedTilesCount: m.acceptedTiles.length
+                    acceptedTilesCount: m.acceptedTiles.length,
+                    danger: m.dangerScore,
+                    efficiency: Math.round(m.efficiencyScore),
+                    score: Math.round(m.finalScore)
                 })) 
             };
         }
     } else if (aiSettings.difficulty === 'random') {
+        const allowedClosedHand = ai.closed.filter(t => t !== forbiddenDiscard);
         bestMove = allowedClosedHand[Math.floor(Math.random() * allowedClosedHand.length)];
         analysisPayload = { type: 'random', options: [] };
     } else if (aiSettings.difficulty === 'beginner') {
-        const topMoves = analysis.slice(0, Math.min(3, analysis.length));
+        const topMoves = scoredMoves.slice(0, Math.min(3, scoredMoves.length));
         bestMove = topMoves[Math.floor(Math.random() * topMoves.length)].discard;
         analysisPayload = { 
             type: 'beginner', 
@@ -342,25 +422,31 @@ export async function decideAiDiscard(boardState, aiSettings, forbiddenDiscard) 
                 discard: m.discard, 
                 shanten: m.shanten, 
                 acceptance: m.acceptance,
-                acceptedTilesCount: m.acceptedTiles.length 
+                acceptedTilesCount: m.acceptedTiles.length,
+                danger: m.dangerScore,
+                efficiency: Math.round(m.efficiencyScore),
+                score: Math.round(m.finalScore)
             })) 
         };
     } else {
-        // Fallback for an unknown difficulty (shouldn't happen, defaults to best DP move)
-        bestMove = analysis[0].discard;
+        bestMove = scoredMoves[0].discard;
         analysisPayload = { 
-            type: aiSettings.style === 'defensive' ? 'defensive' : 'dp', 
-            options: analysis.slice(0, 3).map(m => ({ 
+            type: 'scoring', 
+            style: aiSettings.style,
+            options: scoredMoves.slice(0, 3).map(m => ({ 
                 discard: m.discard, 
                 shanten: m.shanten, 
                 acceptance: m.acceptance,
-                acceptedTilesCount: m.acceptedTiles.length
+                acceptedTilesCount: m.acceptedTiles.length,
+                danger: m.dangerScore,
+                efficiency: Math.round(m.efficiencyScore),
+                score: Math.round(m.finalScore)
             })) 
         };
     }
     
     if (analysisPayload) {
-        const chosenAnalysis = analysis.find(a => a.discard === bestMove) || analysis[0];
+        const chosenAnalysis = scoredMoves.find(a => a.discard === bestMove) || scoredMoves[0];
         if (chosenAnalysis) {
             analysisPayload.chosenStatus = { 
                 shanten: chosenAnalysis.shanten, 
@@ -368,12 +454,19 @@ export async function decideAiDiscard(boardState, aiSettings, forbiddenDiscard) 
                 acceptedTilesCount: chosenAnalysis.acceptedTiles.length
             };
         }
-        // Always include the best possible stats as the "Before Action" baseline
-        analysisPayload.previousStatus = {
-            shanten: analysis[0].shanten,
-            acceptance: analysis[0].acceptance,
-            acceptedTilesCount: analysis[0].acceptedTiles.length
-        };
+        
+        // Use the explicitly provided previous status if available
+        if (previousStatus) {
+            analysisPayload.previousStatus = previousStatus;
+        } else {
+            // Fallback: If no previous status was recorded, use the current best possible move as the baseline
+            // (Note: This will show no improvement if the AI makes the optimal move)
+            analysisPayload.previousStatus = {
+                shanten: scoredMoves[0].shanten,
+                acceptance: scoredMoves[0].acceptance,
+                acceptedTilesCount: scoredMoves[0].acceptedTiles.length
+            };
+        }
     }
 
     return { discard: bestMove, analysisPayload };

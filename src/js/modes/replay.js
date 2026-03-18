@@ -241,6 +241,47 @@ export function renderReplayUI(stepIndex, currentTrajectoryItem) {
                     `).join('')}
                 </div>
             `;
+        } else if (data.type === 'scoring') {
+            insightDetails = `
+                <div class="flex flex-col gap-1 w-full bg-white/50 p-2 rounded-lg">
+                    <div class="flex items-center justify-between mb-1">
+                        <p class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Strategy: ${data.style.charAt(0).toUpperCase() + data.style.slice(1)}</p>
+                        <p class="text-[9px] text-gray-400 font-medium">Ranked by Score</p>
+                    </div>
+                    ${data.options.map((opt, idx) => {
+                        const sColor = opt.shanten < prev.shanten ? 'text-mj-green' : (opt.shanten > prev.shanten ? 'text-mj-red' : 'text-gray-500');
+                        const dColor = opt.danger >= 50 ? 'text-red-500' : (opt.danger <= 15 ? 'text-mj-green' : 'text-orange-500');
+                        
+                        return `
+                        <div class="flex flex-col py-1.5 border-b border-gray-100/50 last:border-0">
+                            <div class="flex items-center justify-between mb-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-gray-400 font-mono text-[9px]">${idx + 1}.</span>
+                                    ${renderTile(opt.discard, { size: 'xs' })}
+                                    <span class="${sColor} text-[10px] font-black">${opt.shanten === 0 ? '叫糊' : opt.shanten + '向聽'}</span>
+                                </div>
+                                <div class="flex gap-1.5">
+                                    <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-1 rounded-sm border border-blue-100">總分 ${opt.score}</span>
+                                </div>
+                            </div>
+                            <div class="flex gap-3 text-[9px] font-bold pl-5">
+                                <div class="flex items-center gap-1 text-gray-600">
+                                    <span class="text-gray-400 font-normal">進張:</span>
+                                    <span>${opt.acceptedTilesCount}款 ${opt.acceptance}張</span>
+                                </div>
+                                <div class="flex items-center gap-1 text-gray-600">
+                                    <span class="text-gray-400 font-normal">效率:</span>
+                                    <span class="text-emerald-600">${opt.efficiency || '-'}</span>
+                                </div>
+                                <div class="flex items-center gap-1 text-gray-600">
+                                    <span class="text-gray-400 font-normal">風險:</span>
+                                    <span class="${dColor}">${opt.danger}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `}).join('')}
+                </div>
+            `;
         } else {
             insightDetails = `
                 <div class="flex flex-col gap-1 w-full bg-white/50 p-2 rounded-lg">
