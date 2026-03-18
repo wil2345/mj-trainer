@@ -155,39 +155,29 @@ export function renderReplayUI(stepIndex, currentTrajectoryItem) {
         
         let prev = data.previousStatus;
         if (!prev) {
-            const tempHand = [...ai.closed, currentTrajectoryItem.tile];
-            const currentShanten = calculateShanten(tempHand, ai.open.length);
-            let acc = 0, kuan = 0;
-            const initialCounts = {};
-            tempHand.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
+            const tempHandWithDrawn = [...ai.closed, currentTrajectoryItem.tile];
             const deadTiles = [...player.river, ...ai.river];
-            deadTiles.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
-            Object.keys(TILE_NAMES).forEach(t => {
-                if ((initialCounts[t] || 0) >= 4) return;
-                if (calculateShanten([...tempHand, t], ai.open.length) < currentShanten) {
-                    acc += (4 - (initialCounts[t] || 0));
-                    kuan += 1;
-                }
-            });
-            prev = { shanten: currentShanten, acceptance: acc, acceptedTilesCount: kuan };
+            // The "Before Action" status of a 17-tile hand is the best 16-tile state it can reach
+            const analysis = getDiscardAnalysis(tempHandWithDrawn, ai.open.length, deadTiles);
+            if (analysis && analysis.length > 0) {
+                prev = { 
+                    shanten: analysis[0].shanten, 
+                    acceptance: analysis[0].acceptance, 
+                    acceptedTilesCount: analysis[0].acceptedTiles.length 
+                };
+            }
         }
 
         let chosen = data.chosenStatus;
         if (!chosen) {
-            const currentShanten = calculateShanten(ai.closed, ai.open.length);
-            let acc = 0, kuan = 0;
-            const initialCounts = {};
-            ai.closed.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
             const deadTiles = [...player.river, ...ai.river];
-            deadTiles.forEach(t => { initialCounts[t] = (initialCounts[t] || 0) + 1; });
-            Object.keys(TILE_NAMES).forEach(t => {
-                if ((initialCounts[t] || 0) >= 4) return;
-                if (calculateShanten([...ai.closed, t], ai.open.length) < currentShanten) {
-                    acc += (4 - (initialCounts[t] || 0));
-                    kuan += 1;
-                }
-            });
-            chosen = { shanten: currentShanten, acceptance: acc, acceptedTilesCount: kuan };
+            const analysis = getDiscardAnalysis(ai.closed, ai.open.length, deadTiles);
+            const chosenAnalysis = analysis.find(a => a.discard === currentTrajectoryItem.tile) || analysis[0];
+            chosen = { 
+                shanten: chosenAnalysis.shanten, 
+                acceptance: chosenAnalysis.acceptance, 
+                acceptedTilesCount: chosenAnalysis.acceptedTiles.length 
+            };
         }
 
         let statusCompareHtml = '';
@@ -329,7 +319,7 @@ export function renderReplayUI(stepIndex, currentTrajectoryItem) {
                                 ? '<span class="bg-yellow-400 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-sm">胡牌</span>'
                                 : (aiShanten === 0 
                                     ? '<span class="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded animate-pulse shadow-sm">叫糊</span>' 
-                                    : '<span class="bg-gray-400 text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow-sm">${aiShanten}向聽</span>')
+                                    : `<span class="bg-gray-400 text-white text-[8px] font-bold px-1.5 py-0.5 rounded shadow-sm">${aiShanten}向聽</span>`)
                             }
                         </div>
                     </div>

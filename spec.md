@@ -1,4 +1,4 @@
-# Taiwan Mahjong Trainer - Project Specification (v1.7.4)
+# Taiwan Mahjong Trainer - Project Specification (v1.8.0)
 
 ## 1. Project Overview
 **Taiwan Mahjong Trainer (`mj-trainer`)** is a Progressive Web App (PWA) designed to help players practice and master Taiwan Mahjong discard strategies. 
@@ -104,15 +104,27 @@ Beyond isolated efficiency training, the app features a full 1-on-1 AI Arena to 
 │   ├── engine.test.js    # Unit tests for the Shanten / Mahjong engine
 │   └── scrapedCases.js   # Auto-generated test cases used by the test suite
 └── src/js/
-    ├── app.js            # Main application UI logic, stat rendering, and event bindings
+    ├── app.js            # Entry point & Dashboard router
     ├── constants.js      # Global constants (TILE_NAMES, SUITS, ALL_TILES)
     ├── storage.js        # Abstraction for localStorage operations (stats tracking)
+    ├── state.js          # Centralized global state management
+    ├── utils.js          # Shared utility functions (mulberry32, shareUrl)
     ├── components/
     │   └── Tile.js       # UI Component logic: Renders tiles using HTML/CSS and Unicode chars
-    └── engine/
+    ├── engine/
         ├── handGenerator.js # Logic to generate random, valid hands based on settings
         ├── shanten.js       # The Core Engine: DP Algorithm for Shanten calculation
+        ├── aiPolicy.js      # AI Decision logic (Chi/Pon/Kan/Discard evaluation)
         └── mcWorker.js      # Web Worker for off-thread Monte Carlo simulations
+    ├── modes/
+        ├── arena.js         # AI Arena (1-on-1 match simulation)
+        ├── training.js      # Training mode (Discard efficiency practice)
+        ├── calculator.js    # Sandbox Calculator & Hand Editor
+        ├── mc.js            # Monte Carlo simulation UI logic
+        └── replay.js        # Post-game analysis & replay scrubber
+    └── ui/
+        ├── settings.js      # Global Settings Modal UI & Logic
+        └── history.js       # History viewer (Arena & Training records)
 ```
 
 ## 5. Mahjong Engine Deep Dive (`shanten.js`)

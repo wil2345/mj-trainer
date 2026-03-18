@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mj-trainer-cache-v1.7.4';
+const CACHE_NAME = 'mj-trainer-cache-v1.8.0';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -12,6 +12,10 @@ const ASSETS_TO_CACHE = [
     './src/js/utils.js',
     './src/js/modes/arena.js',
     './src/js/modes/replay.js',
+    './src/js/modes/training.js',
+    './src/js/modes/calculator.js',
+    './src/js/modes/mc.js',
+    './src/js/ui/settings.js',
     './src/js/ui/history.js',
     './src/js/components/Tile.js',
     './manifest.json',

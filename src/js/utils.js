@@ -9,3 +9,20 @@ export function mulberry32(a) {
       return ((t ^ t >>> 14) >>> 0) / 4294967296;
     }
 }
+
+export function generateShareUrl(handArray) {
+    // Group by suit
+    const grouped = { m: [], p: [], s: [], z: [] };
+    handArray.forEach(tile => grouped[tile[1]].push(tile[0]));
+    
+    let resultStr = "";
+    for (let suit of ['m', 'p', 's', 'z']) {
+        if (grouped[suit].length > 0) {
+            grouped[suit].sort((a, b) => a - b);
+            resultStr += grouped[suit].join('') + suit;
+        }
+    }
+    
+    const baseUrl = window.location.href.split('?')[0];
+    return `${baseUrl}?hand=${resultStr}`;
+}

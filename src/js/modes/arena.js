@@ -13,7 +13,8 @@ import {
 import { decideAiInterrupt, decideAiTurnAction, decideAiDiscard, calculateRestingStatus } from '../engine/aiPolicy.js';
 import { addMatchRecord } from '../storage.js';
 import { renderTile } from '../components/Tile.js';
-import { initApp, showSettingsModal } from '../app.js';
+import { initApp } from '../app.js';
+import { showSettingsModal } from '../ui/settings.js';
 import { initReplayMode } from './replay.js';
 
 export function showAiActionBubble(message) {
@@ -712,6 +713,7 @@ export function vsAiTurn() {
     }
 
     setTimeout(() => {
+        vsGameState.aiLastStatus = calculateRestingStatus(vsGameState.ai.closed, vsGameState.ai.open.length, vsGameState);
         vsAiDiscard();
     }, currentGameState.aiSpeedMode ? 0 : 1000);
 }

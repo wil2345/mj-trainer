@@ -368,6 +368,12 @@ export async function decideAiDiscard(boardState, aiSettings, forbiddenDiscard) 
                 acceptedTilesCount: chosenAnalysis.acceptedTiles.length
             };
         }
+        // Always include the best possible stats as the "Before Action" baseline
+        analysisPayload.previousStatus = {
+            shanten: analysis[0].shanten,
+            acceptance: analysis[0].acceptance,
+            acceptedTilesCount: analysis[0].acceptedTiles.length
+        };
     }
 
     return { discard: bestMove, analysisPayload };

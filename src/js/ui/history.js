@@ -3,7 +3,8 @@ import { currentGameState, vsGameState } from '../state.js';
 import { loadStats } from '../storage.js';
 import { renderTile } from '../components/Tile.js';
 import { TILE_NAMES } from '../constants.js';
-import { initApp, startTrainingSession } from '../app.js';
+import { initApp } from '../app.js';
+import { startTrainingSession } from '../modes/training.js';
 import { initReplayMode } from '../modes/replay.js';
 
 export function renderHistoryScene(activeTab = 'arena') {
